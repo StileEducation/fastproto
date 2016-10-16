@@ -1,5 +1,6 @@
 
 #include <string>
+#include <vector>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/compiler/code_generator.h>
@@ -24,18 +25,22 @@ namespace rb_fastproto {
     private:
         void write_header(
             const google::protobuf::FileDescriptor *file,
-            const std::string &full_header_file_name,
             google::protobuf::io::Printer &printer
         ) const;
         void write_cpp(
             const google::protobuf::FileDescriptor *file,
-            const std::string &full_cpp_file_name,
-            const std::string &full_header_file_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_entrypoint(
+            const std::vector<google::protobuf::FileDescriptor*> files,
             google::protobuf::io::Printer &printer
         ) const;
 
-        std::string header_name_as_identifier(const std::string &header_file_name) const;
     };
+
+    std::string header_name_as_identifier(const google::protobuf::FileDescriptor* proto_file);
+    std::string header_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
+    std::string cpp_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
 }
 
 #endif
