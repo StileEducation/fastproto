@@ -8,6 +8,8 @@
 
 namespace rb_fastproto {
 
+    RBFastProtoCodeGenerator::RBFastProtoCodeGenerator() { }
+
     bool RBFastProtoCodeGenerator::Generate(
         const google::protobuf::FileDescriptor *file,
         const std::string &parameter,
@@ -24,6 +26,8 @@ namespace rb_fastproto {
 
         write_header(file, header_printer);
         write_cpp(file, cpp_printer);
+
+        write_entrypoint(file, output_directory);
 
         return true;
     }
@@ -46,7 +50,7 @@ namespace rb_fastproto {
         // Define a method that the overall-init will call to define the ruby classes & modules contained
         // in this file.
         printer.Print(
-            "extern \"C\" _Init_$header_file_name$();\n",
+            "extern \"C\" void _Init_$header_file_name$();\n",
             "header_file_name", header_name_as_identifier(file)
         );
 
@@ -64,7 +68,7 @@ namespace rb_fastproto {
         printer.Print(
             "#include \"$header_name$\"\n"
             "\n"
-            "naespace pt_fastproto_gen {"
+            "namespace pt_fastproto_gen {"
             "\n",
             "header_name", header_path_for_proto(file)
         );
@@ -72,7 +76,7 @@ namespace rb_fastproto {
         printer.Indent(); printer.Indent();
 
         printer.Print(
-            "extern \"C\" _Init_$header_name$() {\n",
+            "extern \"C\" void _Init_$header_name$() {\n",
             "header_name", header_name_as_identifier(file)
         );
         printer.Indent(); printer.Indent();
@@ -84,14 +88,5 @@ namespace rb_fastproto {
         // Close off the pt_fastproto_gen namespace
         printer.Outdent(); printer.Outdent();
         printer.Print("}\n");
-    }
-
-    void RBFastProtoCodeGenerator::write_entrypoint(
-        const std::vector<google::protobuf::FileDescriptor*> files,
-        google::protobuf::io::Printer &printer
-    ) const {
-
-        // We need to include all of the header files we generated...
-
     }
 }

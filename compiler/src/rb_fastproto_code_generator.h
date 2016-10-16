@@ -1,9 +1,12 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
 #include <google/protobuf/compiler/code_generator.h>
+#include <google/protobuf/io/zero_copy_stream.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/io/printer.h>
 
 #ifndef __RB_FASTPROTO_CODE_GENERATOR
@@ -12,7 +15,7 @@
 namespace rb_fastproto {
     class RBFastProtoCodeGenerator : public ::google::protobuf::compiler::CodeGenerator {
     public:
-        explicit RBFastProtoCodeGenerator() = default;
+        explicit RBFastProtoCodeGenerator();
         virtual ~RBFastProtoCodeGenerator() = default;
 
         virtual bool Generate(
@@ -32,8 +35,8 @@ namespace rb_fastproto {
             google::protobuf::io::Printer &printer
         ) const;
         void write_entrypoint(
-            const std::vector<google::protobuf::FileDescriptor*> files,
-            google::protobuf::io::Printer &printer
+            const google::protobuf::FileDescriptor* file,
+            google::protobuf::compiler::OutputDirectory *output_directory
         ) const;
 
     };
