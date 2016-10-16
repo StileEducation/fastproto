@@ -1,0 +1,15 @@
+task :build_compiler do
+    cd 'compiler' do
+        sh 'cmake', '.'
+        sh 'make'
+    end
+end
+
+task :gen_test_protobufs => [:build_compiler] do
+    cd 'spec' do
+        sh *([
+            'protoc', '--cpp_out', 'compiled_protobufs', '--rb_fastproto_out', 'compiled_protobufs',
+            '--plugin=protoc-gen-rb_fastproto=../compiler/rb_fastproto_compiler'
+        ] + Dir['protobufs/**/*.proto'].map { |f| f.to_s })
+    end
+end

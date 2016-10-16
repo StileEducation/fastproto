@@ -1,0 +1,6 @@
+compiler/CMakeFiles
+compiler/cmake_install.cmake
+compiler/CMakeCache.txt
+compiler/Makefile
+compiler/rb_fastproto_compiler
+spec/compiled_protobufs
