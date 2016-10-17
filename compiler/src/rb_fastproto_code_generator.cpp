@@ -141,6 +141,8 @@ namespace rb_fastproto {
         write_cpp_message_struct_validator(file, message_type, class_name, printer);
         // Define serialization methods
         write_cpp_message_struct_serializer(file, message_type, class_name, printer);
+        // Desserialization methods
+        write_cpp_message_struct_parser(file, message_type, class_name, printer);
 
         printer.Outdent(); printer.Outdent();
         printer.Print("};\n");
@@ -207,6 +209,7 @@ namespace rb_fastproto {
             "rb_define_method(rb_cls, \"initialize\", reinterpret_cast<VALUE(*)(...)>(&initialize), 0);\n"
             "rb_define_method(rb_cls, \"validate!\", reinterpret_cast<VALUE(*)(...)>(&validate), 0);\n"
             "rb_define_method(rb_cls, \"serialize_to_string\", reinterpret_cast<VALUE(*)(...)>(&serialize_to_string), 0);\n"
+            "rb_define_method(rb_cls, \"parse\", reinterpret_cast<VALUE(*)(...)>(&instance_parse), 1);\n"
             "\n",
             "ruby_class_name", message_type->name()
         );
@@ -461,6 +464,76 @@ namespace rb_fastproto {
         );
     }
 
+    void RBFastProtoCodeGenerator::write_cpp_message_struct_parser(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print("VALUE _instance_parse(VALUE io) {\n");
+        printer.Indent(); printer.Indent();
+
+        // Do everything in a block: If stuff raises, we should exit the scope
+        // with a goto to make sure everything gets cleaned up
+
+        // Create a C++ message, which backs this one.
+        auto cpp_proto_ns = boost::replace_all_copy(file->package(), ".", "::");
+        auto cpp_proto_cls = message_type->name();
+        printer.Print(
+            "$cpp_proto_ns$::$cpp_proto_cls$ proto;\n"
+            "// Convert the ruby IO to a string\n"
+            "VALUE io_string = rb_funcall(io, rb_intern(\"read\"), 0);\n"
+            "auto io_string_len = RSTRING_LEN(io_string);\n"
+            "auto io_string_ptr = RSTRING_PTR(io_string);\n"
+            "auto arg_tuple = std::make_tuple(&proto, io_string_ptr, io_string_len);\n"
+            "rb_thread_call_without_gvl(\n"
+            "    [](void* args) -> void* {\n"
+            "        auto _arg_tuple = reinterpret_cast<decltype(arg_tuple)*>(args);\n"
+            "        decltype(proto)* _proto;\n"
+            "        decltype(io_string_len) _io_string_len;\n"
+            "        decltype(io_string_ptr) _io_string_ptr;\n"
+            "        std::tie(_proto, _io_string_ptr, _io_string_len) = *_arg_tuple;\n"
+            "        _proto->ParseFromArray(_io_string_ptr, static_cast<int>(_io_string_len));\n"
+            "        return nullptr;\n"
+            "    },\n"
+            "    &arg_tuple, RUBY_UBF_IO, nullptr\n"
+            ");\n"
+            "RB_GC_GUARD(io_string);\n",
+            "cpp_proto_ns", cpp_proto_ns,
+            "cpp_proto_cls", cpp_proto_cls
+        );
+
+        // Now recursively copy each field over.
+        for (int i = 0; i < message_type->field_count(); i++) {
+            auto field = message_type->field(i);
+
+            switch (field->type()) {
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                    printer.Print("_field_$field_name$ = INT2NUM(proto.$field_name$());\n", "field_name", field->name());
+                    break;
+                default:
+                    // Field not implemented?
+                    // Leave it as zero, which is rb_false
+                    break;
+            }
+        }
+
+        printer.Print("return Qnil;\n");
+        printer.Outdent(); printer.Outdent();
+        printer.Print("}\n");
+
+        // Define a static version too that ruby can call
+        printer.Print(
+            "static VALUE instance_parse(VALUE self, VALUE io) {\n"
+            "    $class_name$* cpp_self;\n"
+            "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
+            "    return cpp_self->_instance_parse(io);\n"
+            "}\n"
+            "\n",
+            "class_name", class_name
+        );
+    }
 
     void RBFastProtoCodeGenerator::write_cpp_message_module_init(
         const google::protobuf::FileDescriptor* file,

@@ -88,6 +88,12 @@ namespace rb_fastproto {
             const std::string &class_name,
             google::protobuf::io::Printer &printer
         ) const;
+        void write_cpp_message_struct_parser(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
         void write_cpp_message_module_init(
             const google::protobuf::FileDescriptor* file,
             const std::vector<std::string> &class_names,

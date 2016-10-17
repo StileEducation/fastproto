@@ -61,4 +61,14 @@ describe 'Generated code' do
             end
         end
     end
+
+    describe 'parse' do
+        describe 'an int32 field' do
+            it 'deserializes properly' do
+                m = ::Fastproto::Test::TestMessageOne.new
+                m.parse(StringIO.new("\x08\x80\x20".force_encoding(Encoding::ASCII_8BIT)))
+                expect(m.id).to eql(4096)
+            end
+        end
+    end
 end
