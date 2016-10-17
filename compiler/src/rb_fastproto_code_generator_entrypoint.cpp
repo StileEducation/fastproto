@@ -48,7 +48,6 @@ namespace rb_fastproto {
 
                 // The base message class
                 extern VALUE cls_fastproto_message;
-
             }
 
             #endif

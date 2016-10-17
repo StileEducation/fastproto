@@ -4,5 +4,5 @@ package Fastproto.Test;
 
 message TestMessageOne {
     required int32 id = 1;
-    optional bool flag = 2;
+    // optional bool flag = 2;
 }
