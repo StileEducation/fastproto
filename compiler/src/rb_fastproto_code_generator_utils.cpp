@@ -25,6 +25,12 @@ namespace rb_fastproto {
         return header_file_path.string();
     }
 
+    std::string cpp_proto_header_path_for_proto(const google::protobuf::FileDescriptor* proto_file) {
+        boost::filesystem::path proto_file_path(proto_file->name());
+        auto header_file_path = proto_file_path.parent_path() / (proto_file_path.stem().string() + ".pb.h");
+        return header_file_path.string();
+    }
+
     std::string cpp_path_for_proto(const google::protobuf::FileDescriptor* proto_file) {
         boost::filesystem::path proto_file_path(proto_file->name());
         auto header_file_path = proto_file_path.parent_path() / (proto_file_path.stem().string() + ".cpp");

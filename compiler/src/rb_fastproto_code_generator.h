@@ -40,7 +40,7 @@ namespace rb_fastproto {
             google::protobuf::compiler::OutputDirectory *output_directory
         ) const;
 
-        void write_cpp_message_struct(
+        std::string write_cpp_message_struct(
             const google::protobuf::FileDescriptor* file,
             const google::protobuf::Descriptor* message_type,
             google::protobuf::io::Printer &printer
@@ -49,35 +49,48 @@ namespace rb_fastproto {
         void write_cpp_message_struct_constructor(
             const google::protobuf::FileDescriptor* file,
             const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
             google::protobuf::io::Printer &printer
         ) const;
         void write_cpp_message_struct_static_initializer(
             const google::protobuf::FileDescriptor* file,
             const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
             google::protobuf::io::Printer &printer
         ) const;
         void write_cpp_message_struct_fields(
             const google::protobuf::FileDescriptor* file,
             const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
             google::protobuf::io::Printer &printer
         ) const;
         void write_cpp_message_struct_accessors(
             const google::protobuf::FileDescriptor* file,
             const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
             google::protobuf::io::Printer &printer
         ) const;
         void write_cpp_message_struct_allocators(
             const google::protobuf::FileDescriptor* file,
             const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
             google::protobuf::io::Printer &printer
         ) const;
         void write_cpp_message_struct_validator(
             const google::protobuf::FileDescriptor* file,
             const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_message_struct_serializer(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
             google::protobuf::io::Printer &printer
         ) const;
         void write_cpp_message_module_init(
             const google::protobuf::FileDescriptor* file,
+            const std::vector<std::string> &class_names,
             google::protobuf::io::Printer &printer
         ) const;
 
@@ -85,6 +98,7 @@ namespace rb_fastproto {
 
     std::string header_name_as_identifier(const google::protobuf::FileDescriptor* proto_file);
     std::string header_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
+    std::string cpp_proto_header_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
     std::string cpp_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
     void add_entrypoint_files(google::protobuf::compiler::CodeGeneratorResponse &response);
 }

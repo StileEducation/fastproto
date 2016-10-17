@@ -73,10 +73,12 @@ namespace rb_fastproto {
             "#include <cstring>\n"
             "#include \"rb_fastproto_init.h\"\n"
             "#include \"$header_name$\"\n"
+            "#include \"$pb_header_name$\"\n"
             "\n"
             "namespace rb_fastproto_gen {"
             "\n",
-            "header_name", header_path_for_proto(file)
+            "header_name", header_path_for_proto(file),
+            "pb_header_name", cpp_proto_header_path_for_proto(file)
         );
 
         printer.Indent(); printer.Indent();
@@ -85,59 +87,70 @@ namespace rb_fastproto {
             "static VALUE package_rb_module = Qnil;\n"
         );
         // Define a struct for each message we have
+        // Collect the class names that got written.
+        std::vector<std::string> class_names;
         for (int i = 0; i < file->message_type_count(); i++) {
             auto message_type = file->message_type(i);
-            write_cpp_message_struct(file, message_type, printer);
+            class_names.push_back(write_cpp_message_struct(file, message_type, printer));
         }
 
         // Write an Init function that gets called from the ruby gem init.
-        write_cpp_message_module_init(file, printer);
+        write_cpp_message_module_init(file, class_names, printer);
 
         // Close off the rb_fastproto_gen namespace
         printer.Outdent(); printer.Outdent();
         printer.Print("}\n");
     }
 
-    void RBFastProtoCodeGenerator::write_cpp_message_struct(
+    std::string RBFastProtoCodeGenerator::write_cpp_message_struct(
         const google::protobuf::FileDescriptor* file,
         const google::protobuf::Descriptor* message_type,
         google::protobuf::io::Printer &printer
     ) const {
         // This bit is responsible for writing out the message struct.
 
+        // Prefix the class name so we don't collide with the C++ generatec code.
+        std::string class_name(message_type->name());
+        class_name.insert(0, "RB");
+
         // Define a struct that ruby will wrap for this class.
         // note that we do this in here, not in the header file, because the names might not
         // be unique so we really don't want to export these symbols
         printer.Print(
             "struct $class_name$ {\n",
-            "class_name", message_type->name()
+            "class_name", class_name
         );
         printer.Indent(); printer.Indent();
 
         // The instance constructor for a protobuf message
-        write_cpp_message_struct_constructor(file, message_type, printer);
+        write_cpp_message_struct_constructor(file, message_type, class_name, printer);
         // a static method that defines this class in rubyland
-        write_cpp_message_struct_static_initializer(file, message_type, printer);
+        write_cpp_message_struct_static_initializer(file, message_type, class_name, printer);
         // a VALUE for each member
-        write_cpp_message_struct_fields(file, message_type, printer);
+        write_cpp_message_struct_fields(file, message_type, class_name, printer);
         // Static accessors for each field, so ruby can call them
-        write_cpp_message_struct_accessors(file, message_type, printer);
+        write_cpp_message_struct_accessors(file, message_type, class_name, printer);
         // The message needs an alloc function, and a free function, and a mark function, for ruby.
         // It also needs a static initialize method to use as a factory.
-        write_cpp_message_struct_allocators(file, message_type, printer);
+        write_cpp_message_struct_allocators(file, message_type, class_name, printer);
         // Define validation methods
-        write_cpp_message_struct_validator(file, message_type, printer);
+        write_cpp_message_struct_validator(file, message_type, class_name, printer);
+        // Define serialization methods
+        write_cpp_message_struct_serializer(file, message_type, class_name, printer);
 
         printer.Outdent(); printer.Outdent();
         printer.Print("};\n");
 
         // For some silly reason we need to initialized its static members at translation-unit scope?
-        printer.Print("VALUE $class_name$::rb_cls = Qnil;\n", "class_name", message_type->name());
+        printer.Print("VALUE $class_name$::rb_cls = Qnil;\n", "class_name", class_name);
+
+        return class_name;
     }
 
     void RBFastProtoCodeGenerator::write_cpp_message_struct_constructor(
         const google::protobuf::FileDescriptor* file,
         const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
         google::protobuf::io::Printer &printer
     ) const {
         // Object constructor; called in ruby initialize method.
@@ -147,7 +160,7 @@ namespace rb_fastproto {
             "bool have_initialized;\n"
             "\n"
             "$class_name$() : have_initialized(true) {\n",
-            "class_name", message_type->name()
+            "class_name", class_name
         );
         printer.Indent(); printer.Indent();
 
@@ -173,6 +186,7 @@ namespace rb_fastproto {
     void RBFastProtoCodeGenerator::write_cpp_message_struct_static_initializer(
         const google::protobuf::FileDescriptor* file,
         const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
         google::protobuf::io::Printer &printer
     ) const {
         // Defines the static initialize_class method for this struct
@@ -184,12 +198,13 @@ namespace rb_fastproto {
         printer.Indent(); printer.Indent();
 
         printer.Print(
-            "rb_cls = rb_define_class_under(package_rb_module, \"$class_name$\", cls_fastproto_message);\n"
+            "rb_cls = rb_define_class_under(package_rb_module, \"$ruby_class_name$\", cls_fastproto_message);\n"
             "rb_define_alloc_func(rb_cls, &alloc);\n"
             "rb_define_method(rb_cls, \"initialize\", reinterpret_cast<VALUE(*)(...)>(&initialize), 0);\n"
             "rb_define_method(rb_cls, \"validate!\", reinterpret_cast<VALUE(*)(...)>(&validate), 0);\n"
+            "rb_define_method(rb_cls, \"serialize_to_string\", reinterpret_cast<VALUE(*)(...)>(&serialize_to_string), 0);\n"
             "\n",
-            "class_name", message_type->name()
+            "ruby_class_name", message_type->name()
         );
 
         // The ruby class needs accessors defined
@@ -210,6 +225,7 @@ namespace rb_fastproto {
     void RBFastProtoCodeGenerator::write_cpp_message_struct_fields(
         const google::protobuf::FileDescriptor* file,
         const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
         google::protobuf::io::Printer &printer
     ) const {
         // Writes the VALUE fields we store messages in.
@@ -224,6 +240,7 @@ namespace rb_fastproto {
     void RBFastProtoCodeGenerator::write_cpp_message_struct_accessors(
         const google::protobuf::FileDescriptor* file,
         const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
         google::protobuf::io::Printer &printer
     ) const {
         // Static methods that ruby calls as accessors
@@ -244,7 +261,7 @@ namespace rb_fastproto {
                 "}\n"
                 "\n",
                 "field_name", field->name(),
-                "class_name", message_type->name()
+                "class_name", class_name
             );
         }
         printer.Print("\n");
@@ -253,6 +270,7 @@ namespace rb_fastproto {
     void RBFastProtoCodeGenerator::write_cpp_message_struct_allocators(
         const google::protobuf::FileDescriptor* file,
         const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
         google::protobuf::io::Printer &printer
     ) const {
         // The message needs an alloc function, and a free function, and a mark function, for ruby.
@@ -288,7 +306,7 @@ namespace rb_fastproto {
             "    obj->_mark();\n"
             "}\n"
             "\n",
-            "class_name", message_type->name()
+            "class_name", class_name
         );
 
         // The mark function needs to touch all of our value fields
@@ -310,6 +328,7 @@ namespace rb_fastproto {
     void RBFastProtoCodeGenerator::write_cpp_message_struct_validator(
         const google::protobuf::FileDescriptor* file,
         const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
         google::protobuf::io::Printer &printer
     ) const {
         // Implements validate!
@@ -354,13 +373,77 @@ namespace rb_fastproto {
             "    return cpp_self->_validate();\n"
             "}\n"
             "\n",
-            "class_name", message_type->name()
+            "class_name", class_name
         );
 
     }
 
+    void RBFastProtoCodeGenerator::write_cpp_message_struct_serializer(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+
+        printer.Print("VALUE _serialize_to_string() {\n");
+        printer.Indent(); printer.Indent();
+
+        // OK. First thing we need to do is validate that our VALUES are as expected
+        printer.Print("_validate();\n");
+        // Now create a C++ message, which backs this one.
+        auto cpp_proto_ns = boost::replace_all_copy(file->package(), ".", "::");
+        auto cpp_proto_cls = message_type->name();
+        printer.Print(
+            "$cpp_proto_ns$::$cpp_proto_cls$ proto;\n",
+            "cpp_proto_ns", cpp_proto_ns,
+            "cpp_proto_cls", cpp_proto_cls
+        );
+
+        // Recursively copy each field over.
+        for (int i = 0; i < message_type->field_count(); i++) {
+            auto field = message_type->field(i);
+
+            switch (field->type()) {
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                    printer.Print("proto.set_$field_name$(FIX2INT(_field_$field_name$));\n", "field_name", field->name());
+                    break;
+                default:
+                    // Field not implemented?
+                    // Leave it as zero, which is rb_false
+                    break;
+            }
+        }
+
+        // Now serialize
+        printer.Print(
+            "auto pb_size = proto.ByteSize();\n"
+            "VALUE rb_str = rb_str_new(\"\", 0);\n"
+            "rb_str_resize(rb_str, pb_size);\n"
+            "proto.SerializeToArray(RSTRING_PTR(rb_str), pb_size);\n"
+            "return rb_str;\n"
+        );
+
+
+        printer.Outdent(); printer.Outdent();
+        printer.Print("}\n");
+
+        // Define a static version too that ruby can call
+        printer.Print(
+            "static VALUE serialize_to_string(VALUE self) {\n"
+            "    $class_name$* cpp_self;\n"
+            "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
+            "    return cpp_self->_serialize_to_string();\n"
+            "}\n"
+            "\n",
+            "class_name", class_name
+        );
+    }
+
+
     void RBFastProtoCodeGenerator::write_cpp_message_module_init(
         const google::protobuf::FileDescriptor* file,
+        const std::vector<std::string> &class_names,
         google::protobuf::io::Printer &printer
     ) const {
         printer.Print(
@@ -384,14 +467,11 @@ namespace rb_fastproto {
             );
         }
 
-        // For every message in the file, we need to create a message class
-        //     - Create a message class
-        for (int i = 0; i < file->message_type_count(); i++) {
-            auto message_type = file->message_type(i);
+        for (auto&& class_name : class_names) {
 
             printer.Print(
                 "$class_name$::initialize_class();\n",
-                "class_name", message_type->name()
+                "class_name", class_name
             );
         }
 

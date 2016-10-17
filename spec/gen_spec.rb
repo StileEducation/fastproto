@@ -24,7 +24,7 @@ describe 'Generated code' do
     end
 
     describe 'validate!' do
-        describe 'and int32 field' do
+        describe 'an int32 field' do
             it 'works with a good int' do
                 m = ::Fastproto::Test::TestMessageOne.new
                 m.id = 999
@@ -47,6 +47,17 @@ describe 'Generated code' do
                 m = ::Fastproto::Test::TestMessageOne.new
                 m.id = [1]
                 expect { m.validate! }.to raise_error(TypeError)
+            end
+        end
+    end
+
+    describe 'serialize_to_string' do
+        describe 'an int32 field' do
+            it 'serializes properly' do
+                m = ::Fastproto::Test::TestMessageOne.new
+                m.id = 4096
+                # Handy tool: http://yura415.github.io/js-protobuf-encode-decode/
+                expect(m.serialize_to_string).to eq("\x08\x80\x20".force_encoding(Encoding::ASCII_8BIT))
             end
         end
     end
