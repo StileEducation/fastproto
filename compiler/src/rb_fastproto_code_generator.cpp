@@ -104,10 +104,25 @@ namespace rb_fastproto {
                 "// (thereby invoking its constructor)\n"
                 "bool have_initialized;\n"
                 "\n"
-                "$class_name$() : have_initialized(true) { }\n"
-                "\n",
+                "$class_name$() : have_initialized(true) {\n",
                 "class_name", message_type->name()
             );
+            printer.Indent(); printer.Indent();
+
+            // Initialze all the fields to default values.
+            for (int j = 0; j < message_type->field_count(); j++) {
+                auto field = message_type->field(j);
+
+                switch (field->type()) {
+                    case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                    case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                        printer.Print("_field_$field_name$ = LONG2FIX(0);\n", "field_name", field->name());
+                        break;
+                }
+            }
+
+            printer.Outdent(); printer.Outdent();
+            printer.Print("}\n\n");
 
 
             // a static method that defines this class in rubyland
@@ -197,6 +212,8 @@ namespace rb_fastproto {
             printer.Print(
                 "static VALUE alloc(VALUE self) {\n"
                 "    auto memory = new std::aligned_storage<sizeof($class_name$)>;\n"
+                "    // Important: It guarantees that reading have_initialized returns false so we know\n"
+                "    // not to run the destructor\n"
                 "    std::memset(memory, 0, sizeof($class_name$));\n"
                 "    return Data_Wrap_Struct(self, &mark, &free, memory);\n"
                 "}\n"
