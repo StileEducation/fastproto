@@ -48,6 +48,32 @@ namespace rb_fastproto {
             "}\n"
         );
 
+        // Add an extconf.rb so it can be compiled
+        auto extconf_file = response.add_file();
+        extconf_file->set_name("extconf.rb");
+        extconf_file->set_content(
+            "require 'mkmf'\n"
+            "dir_config('protobuf')\n"
+            "dir_config('boost')\n"
+            "$CXXFLAGS << ' --std=c++14'\n"
+            "$LOCAL_LIBS << ' -lprotobuf'\n"
+            // All of our objects are in subdirectories (that match the original proto subdirectories)
+            // but mkmf only compiles stuff in the toplevel. Add targets to $objs representing *every*
+            // cpp/cc file in the tree.
+            "$objs =  Dir['**/*.{cpp,cc,c}'].map { |f|\n"
+            "    File.join(File.dirname(f), File.basename(f, '.*')) + '.' + CONFIG['OBJEXT']\n"
+            "}\n"
+            "create_makefile('fastproto_gen')\n"
+            // We now need to hack at the generated makefile to add a cleanup job (using a bash extglob)
+            // to clean up the extra targets we added.
+            "makefile_text = File.read('Makefile')\n"
+            "makefile_text.gsub!(/^\\s*SHELL\\s*=.*$/, 'SHELL=/bin/bash -O extglob -c')\n"
+            "makefile_text += <<-EOS\n"
+            "    CLEANOBJS:= $(CLEANOBJS) **/*.#{CONFIG['OBJEXT']}\n"
+            "EOS\n"
+            "File.open('Makefile', 'w') { |f| f.write makefile_text }\n"
+        );
+
         if (google::protobuf::compiler::GenerateCode(request, *generator, &response, &error_msg)) {
             if (!response.SerializeToFileDescriptor(STDOUT_FILENO)) {
                 std::cerr << argv[0] << ": Error writing to stdout." << std::endl;

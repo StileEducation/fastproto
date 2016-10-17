@@ -41,7 +41,7 @@ namespace rb_fastproto {
             "#ifndef __$header_file_name$_H\n"
             "#define __$header_file_name$_H\n"
             "\n"
-            "namespace pt_fastproto_gen {"
+            "namespace rb_fastproto_gen {"
             "\n",
             "header_file_name", header_name_as_identifier(file)
         );
@@ -66,9 +66,10 @@ namespace rb_fastproto {
         google::protobuf::io::Printer &printer
     ) const {
         printer.Print(
+            "#include <ruby/ruby.h>\n"
             "#include \"$header_name$\"\n"
             "\n"
-            "namespace pt_fastproto_gen {"
+            "namespace rb_fastproto_gen {"
             "\n",
             "header_name", header_path_for_proto(file)
         );
@@ -76,16 +77,55 @@ namespace rb_fastproto {
         printer.Indent(); printer.Indent();
 
         printer.Print(
+            "static VALUE package_rb_module = Qnil;\n"
+        );
+        // We need to store a VALUE for each class we are going to define
+        for (int i = 0; i < file->message_type_count(); i++) {
+            auto message_type = file->message_type(i);
+
+            printer.Print(
+                "static VALUE cls_$class_name$ = Qnil;\n",
+                "class_name", message_type->name()
+            );
+        }
+        printer.Print("\n");
+        printer.Print(
             "extern \"C\" void _Init_$header_name$() {\n",
             "header_name", header_name_as_identifier(file)
         );
         printer.Indent(); printer.Indent();
 
+        // We need to define a ruby module for the package to store message classes in.
+        std::vector<std::string> package_elements;
+        boost::algorithm::split(package_elements, file->package(), boost::is_any_of("."));
+        // The first scope is special because we need to use rb_define_module, not rb_define_module_under
+        printer.Print(
+            "package_rb_module = rb_define_module(\"$package_el$\");\n",
+            "package_el", package_elements[0]
+        );
+        for (int i = 1; i < package_elements.size(); i++) {
+            printer.Print(
+                "package_rb_module = rb_define_module_under(package_rb_module, \"$package_el$\");\n",
+                "package_el", package_elements[i]
+            );
+        }
+
+        // For every message in the file, we need to create a message class
+        //     - Create a message class
+        for (int i = 0; i < file->message_type_count(); i++) {
+            auto message_type = file->message_type(i);
+
+            printer.Print(
+                "cls_$class_name$ = rb_define_class_under(package_rb_module, \"$class_name$\", rb_cObject);\n",
+                "class_name", message_type->name()
+            );
+        }
+
         // Close off the _Init_header_name function
         printer.Outdent(); printer.Outdent();
         printer.Print("}\n");
 
-        // Close off the pt_fastproto_gen namespace
+        // Close off the rb_fastproto_gen namespace
         printer.Outdent(); printer.Outdent();
         printer.Print("}\n");
     }

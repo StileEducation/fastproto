@@ -1,4 +1,5 @@
 require 'fileutils'
+require 'rspec/core/rake_task'
 
 task :build_compiler do
     cd 'compiler' do
@@ -18,3 +19,12 @@ task :gen_test_protobufs => [:build_compiler] do
         ] + Dir['protobufs/**/*.proto'].map { |f| f.to_s })
     end
 end
+
+task :build_gen => [:gen_test_protobufs] do
+    cd 'spec/compiled_protobufs' do
+        sh 'ruby', 'extconf.rb'
+        sh 'make'
+    end
+end
+
+RSpec::Core::RakeTask.new('spec' => 'build_gen')

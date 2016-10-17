@@ -25,7 +25,7 @@ namespace rb_fastproto {
             "header", header_path_for_proto(file)
         );
         entrypoint_insertion_printer.Print(
-            "_Init_$init_method$();\n",
+            "rb_fastproto_gen::_Init_$init_method$();\n",
             "init_method", header_name_as_identifier(file)
         );
     }
