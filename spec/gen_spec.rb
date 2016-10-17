@@ -22,4 +22,32 @@ describe 'Generated code' do
             expect(::Fastproto::Test::TestMessageOne.new.id).to eql(0)
         end
     end
+
+    describe 'validate!' do
+        describe 'and int32 field' do
+            it 'works with a good int' do
+                m = ::Fastproto::Test::TestMessageOne.new
+                m.id = 999
+                expect { m.validate! }.to_not raise_error
+            end
+
+            it 'throws when out of range' do
+                m = ::Fastproto::Test::TestMessageOne.new
+                m.id = 2**31 + 2
+                expect { m.validate! }.to raise_error(TypeError)
+            end
+
+            it 'throws when a float' do
+                m = ::Fastproto::Test::TestMessageOne.new
+                m.id = 1.1
+                expect { m.validate! }.to raise_error(TypeError)
+            end
+
+            it 'throws when an array' do
+                m = ::Fastproto::Test::TestMessageOne.new
+                m.id = [1]
+                expect { m.validate! }.to raise_error(TypeError)
+            end
+        end
+    end
 end

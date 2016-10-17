@@ -125,6 +125,8 @@ namespace rb_fastproto {
         // The message needs an alloc function, and a free function, and a mark function, for ruby.
         // It also needs a static initialize method to use as a factory.
         write_cpp_message_struct_allocators(file, message_type, printer);
+        // Define validation methods
+        write_cpp_message_struct_validator(file, message_type, printer);
 
         printer.Outdent(); printer.Outdent();
         printer.Print("};\n");
@@ -185,6 +187,7 @@ namespace rb_fastproto {
             "rb_cls = rb_define_class_under(package_rb_module, \"$class_name$\", cls_fastproto_message);\n"
             "rb_define_alloc_func(rb_cls, &alloc);\n"
             "rb_define_method(rb_cls, \"initialize\", reinterpret_cast<VALUE(*)(...)>(&initialize), 0);\n"
+            "rb_define_method(rb_cls, \"validate!\", reinterpret_cast<VALUE(*)(...)>(&validate), 0);\n"
             "\n",
             "class_name", message_type->name()
         );
@@ -302,6 +305,58 @@ namespace rb_fastproto {
         printer.Print("};\n");
 
         printer.Print("\n");
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_message_struct_validator(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        google::protobuf::io::Printer &printer
+    ) const {
+        // Implements validate!
+        printer.Print("VALUE _validate() {\n");
+        printer.Indent(); printer.Indent();
+
+        // Validate each field.
+        for (int i = 0; i < message_type->field_count(); i++) {
+            auto field = message_type->field(i);
+
+            switch (field->type()) {
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                    printer.Print(
+                        "Check_Type(_field_$field_name$, T_FIXNUM);\n"
+                        "if (\n"
+                        "    FIX2LONG(_field_$field_name$) > std::numeric_limits<int32_t>::max() || \n"
+                        "    FIX2LONG(_field_$field_name$) < std::numeric_limits<int32_t>::min()\n"
+                        " ) {\n"
+                        "    rb_raise(rb_eTypeError, \"Out of range\");\n"
+                        "}\n",
+                        "field_name", field->name()
+                    );
+                    break;
+                default:
+                    // Field not implemented?
+                    // Leave it as zero, which is rb_false
+                    break;
+            }
+        }
+
+        printer.Print("return Qnil;\n");
+
+        printer.Outdent(); printer.Outdent();
+        printer.Print("}\n");
+
+        // Define a static version too that ruby can call
+        printer.Print(
+            "static VALUE validate(VALUE self) {\n"
+            "    $class_name$* cpp_self;\n"
+            "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
+            "    return cpp_self->_validate();\n"
+            "}\n"
+            "\n",
+            "class_name", message_type->name()
+        );
+
     }
 
     void RBFastProtoCodeGenerator::write_cpp_message_module_init(
