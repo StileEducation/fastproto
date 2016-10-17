@@ -22,4 +22,13 @@ describe 'Generated code' do
             expect(::Fastproto::Test::TestMessageOne.new.id).to eql(0)
         end
     end
+
+    describe 'integer fields' do
+        it 'rejects numbers that are too big' do
+            message = ::Fastproto::Test::TestMessageOne.new
+            expect {
+                message.id = 2**31 + 2
+            }.to raise_error(TypeError)
+        end
+    end
 end
