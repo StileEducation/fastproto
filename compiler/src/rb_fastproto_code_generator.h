@@ -8,6 +8,7 @@
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/io/printer.h>
+#include <google/protobuf/compiler/plugin.pb.h>
 
 #ifndef __RB_FASTPROTO_CODE_GENERATOR
 #define __RB_FASTPROTO_CODE_GENERATOR
@@ -44,6 +45,7 @@ namespace rb_fastproto {
     std::string header_name_as_identifier(const google::protobuf::FileDescriptor* proto_file);
     std::string header_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
     std::string cpp_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
+    void add_entrypoint_files(google::protobuf::compiler::CodeGeneratorResponse &response);
 }
 
 #endif

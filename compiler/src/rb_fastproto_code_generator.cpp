@@ -67,6 +67,7 @@ namespace rb_fastproto {
     ) const {
         printer.Print(
             "#include <ruby/ruby.h>\n"
+            "#include \"rb_fastproto_init.h\"\n"
             "#include \"$header_name$\"\n"
             "\n"
             "namespace rb_fastproto_gen {"
@@ -116,7 +117,7 @@ namespace rb_fastproto {
             auto message_type = file->message_type(i);
 
             printer.Print(
-                "cls_$class_name$ = rb_define_class_under(package_rb_module, \"$class_name$\", rb_cObject);\n",
+                "cls_$class_name$ = rb_define_class_under(package_rb_module, \"$class_name$\", cls_fastproto_message);\n",
                 "class_name", message_type->name()
             );
         }
