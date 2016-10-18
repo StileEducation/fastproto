@@ -40,7 +40,7 @@ describe 'Generated code' do
             it 'throws when out of range' do
                 m = ::Fastproto::Test::TestMessageOne.new
                 m.id = 2**31 + 2
-                expect { m.validate! }.to raise_error(TypeError)
+                expect { m.validate! }.to raise_error(RangeError)
             end
 
             it 'throws when a float' do
@@ -66,7 +66,7 @@ describe 'Generated code' do
             it 'throws when out of range' do
                 m = ::Fastproto::Test::TestMessageOne.new
                 m.field_64 = 2**63 + 2
-                expect { m.validate! }.to raise_error(TypeError)
+                expect { m.validate! }.to raise_error(RangeError)
             end
         end
     end
@@ -76,6 +76,14 @@ describe 'Generated code' do
             it 'serializes properly' do
                 m = ::Fastproto::Test::TestMessageOne.new
                 m.id = 4096
+                # Handy tool: http://yura415.github.io/js-protobuf-encode-decode/
+                expect(m.serialize_to_string).to eq("\x08\x80\x20".force_encoding(Encoding::ASCII_8BIT))
+            end
+
+            it 'serializes it if it is optional and set' do
+                m = ::Fastproto::Test::TestMessageOne.new
+                m.id = 4096
+                m.field_64 = 0
                 # Handy tool: http://yura415.github.io/js-protobuf-encode-decode/
                 expect(m.serialize_to_string).to eq("\x08\x80\x20\x10\x00".force_encoding(Encoding::ASCII_8BIT))
             end

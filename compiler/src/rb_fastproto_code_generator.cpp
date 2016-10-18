@@ -130,8 +130,6 @@ namespace rb_fastproto {
         write_cpp_message_struct_constructor(file, message_type, class_name, printer);
         // a static method that defines this class in rubyland
         write_cpp_message_struct_static_initializer(file, message_type, class_name, printer);
-        // a VALUE for each member
-        write_cpp_message_struct_fields(file, message_type, class_name, printer);
         // Static accessors for each field, so ruby can call them
         write_cpp_message_struct_accessors(file, message_type, class_name, printer);
         // The message needs an alloc function, and a free function, and a mark function, for ruby.
@@ -164,34 +162,23 @@ namespace rb_fastproto {
             "// Keep this so we know whether to delete a char array of memory, or delete the object\n"
             "// (thereby invoking its constructor)\n"
             "bool have_initialized;\n"
+            "// Now create a C++ message, which backs this one.\n"
+            "$cpp_proto_class$ cpp_proto;\n"
+            "// This holds the last validation exception we caught when assigning a field from\n"
+            "// ruby to C. It will get raised when validate! is called.\n"
+            "VALUE last_validation_exception;\n"
             "\n"
-            "$class_name$() : have_initialized(true) {\n",
-            "class_name", class_name
+            "$class_name$() : \n"
+            "    have_initialized(true),\n"
+            "    cpp_proto(),\n"
+            "    last_validation_exception(Qnil) {\n",
+
+            "class_name", class_name,
+            "cpp_proto_class", cpp_proto_class_name(message_type)
         );
         printer.Indent(); printer.Indent();
 
-        for (int i = 0; i < message_type->field_count(); i++) {
-            auto field = message_type->field(i);
-
-            switch (field->type()) {
-                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
-                    printer.Print("_field_$field_name$ = LONG2FIX(0);\n", "field_name", field->name());
-                    break;
-                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
-                    printer.Print("_field_$field_name$ = ULONG2FIX(0);\n", "field_name", field->name());
-                    break;
-                default:
-                    // Field not implemented?
-                    // Leave it as zero, which is rb_false
-                    break;
-            }
-        }
+        // TODO: Set fields from the constructor.
 
         printer.Outdent(); printer.Outdent();
         printer.Print("}\n\n");
@@ -217,9 +204,10 @@ namespace rb_fastproto {
             "rb_define_method(rb_cls, \"initialize\", reinterpret_cast<VALUE(*)(...)>(&initialize), 0);\n"
             "rb_define_method(rb_cls, \"validate!\", reinterpret_cast<VALUE(*)(...)>(&validate), 0);\n"
             "rb_define_method(rb_cls, \"serialize_to_string\", reinterpret_cast<VALUE(*)(...)>(&serialize_to_string), 0);\n"
-            "rb_define_method(rb_cls, \"parse\", reinterpret_cast<VALUE(*)(...)>(&instance_parse), 1);\n"
+            "rb_define_method(rb_cls, \"parse\", reinterpret_cast<VALUE(*)(...)>(&parse), 1);\n"
             "\n",
-            "ruby_class_name", message_type->name()
+            "ruby_class_name", message_type->name(),
+            "class_name", class_name
         );
 
         // The ruby class needs accessors defined
@@ -237,21 +225,6 @@ namespace rb_fastproto {
         printer.Print("}\n\n");
     }
 
-    void RBFastProtoCodeGenerator::write_cpp_message_struct_fields(
-        const google::protobuf::FileDescriptor* file,
-        const google::protobuf::Descriptor* message_type,
-        const std::string &class_name,
-        google::protobuf::io::Printer &printer
-    ) const {
-        // Writes the VALUE fields we store messages in.
-        for (int j = 0; j < message_type->field_count(); j++) {
-            auto field = message_type->field(j);
-
-            printer.Print("VALUE _field_$field_name$;\n", "field_name", field->name());
-        }
-        printer.Print("\n");
-    }
-
     void RBFastProtoCodeGenerator::write_cpp_message_struct_accessors(
         const google::protobuf::FileDescriptor* file,
         const google::protobuf::Descriptor* message_type,
@@ -262,22 +235,122 @@ namespace rb_fastproto {
         for (int j = 0; j < message_type->field_count(); j++) {
             auto field = message_type->field(j);
 
+            // We are doing ruby type conversions.
             printer.Print(
                 "static VALUE set_$field_name$(VALUE self, VALUE val) {\n"
                 "    $class_name$* cpp_self;\n"
                 "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
-                "    cpp_self->_field_$field_name$ = val;\n"
-                "    return Qnil;\n"
-                "}\n"
-                "static VALUE get_$field_name$(VALUE self) {\n"
-                "    $class_name$* cpp_self;\n"
-                "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
-                "    return cpp_self->_field_$field_name$;\n"
-                "}\n"
                 "\n",
                 "field_name", field->name(),
                 "class_name", class_name
             );
+            printer.Indent(); printer.Indent();
+
+            // Depending on the ruby class, we do a different conversion
+            // The numeric _S macros are defined in generator_entrypoint.cpp
+            // and wrap the ruby macros to disable float-to-int coersion
+            std::string cpp_value_type;
+            std::string conversion_macro;
+            switch (field->type()) {
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
+                    cpp_value_type = "int32_t";
+                    conversion_macro = "NUM2INT_S($field_local$)";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                    cpp_value_type = "uint32_t";
+                    conversion_macro = "NUM2UINT_S($field_local$)";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
+                    cpp_value_type = "int64_t";
+                    conversion_macro = "NUM2LONG_S($field_local$)";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
+                    cpp_value_type = "uint64_t";
+                    conversion_macro = "NUM2ULONG_S($field_local$)";
+                    break;
+                default:
+                    break;
+            }
+
+            // The gymnastics with the the dangerous_func lambda is so we can catch any exception
+            // that gets raised in the conversion macro and re-raise it when validate! is called.
+            printer.Print(
+                ("struct dangerous_func_data {\n"
+                "    $cpp_value_type$ converted_value;\n"
+                "    VALUE value_to_convert;\n"
+                "};\n"
+                "auto dangerous_func = [](VALUE data_as_value) -> VALUE {\n"
+                "    // Unwrap our 'VALUE' into an actual pointer\n"
+                "    auto data = reinterpret_cast<dangerous_func_data*>(NUM2ULONG(data_as_value));\n"
+                "    data->converted_value = " + conversion_macro + ";\n"
+                "    return Qnil;\n"
+                "};\n"
+                "int exc_status;\n"
+                "dangerous_func_data data_struct;\n"
+                "data_struct.value_to_convert = val;\n"
+                "rb_protect(dangerous_func, ULONG2NUM(reinterpret_cast<uint64_t>(&data_struct)), &exc_status);\n"
+                "if (exc_status) {\n"
+                "    // Exception!\n"
+                "    cpp_self->last_validation_exception = rb_errinfo();\n"
+                "    rb_set_errinfo(Qnil);\n"
+                "} else {\n"
+                "     cpp_self->cpp_proto.set_$field_name$(data_struct.converted_value);\n"
+                "}").c_str(),
+                "field_name", field->name(),
+                "field_local", "data->value_to_convert",
+                "cpp_value_type", cpp_value_type
+            );
+
+            printer.Print("return Qnil;\n");
+            printer.Outdent(); printer.Outdent();
+            printer.Print("}\n");
+
+            printer.Print(
+                "static VALUE get_$field_name$(VALUE self, VALUE val) {\n"
+                "    $class_name$* cpp_self;\n"
+                "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
+                "\n",
+                "field_name", field->name(),
+                "class_name", class_name
+            );
+            printer.Indent(); printer.Indent();
+
+            // We also need a getter.
+            // Tis is slightly safer and needs no rescue.
+            switch (field->type()) {
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
+                    conversion_macro = "INT2NUM($field_local$)";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                    conversion_macro = "UINT2NUM($field_local$)";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
+                    conversion_macro = "LONG2NUM($field_local$)";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
+                    conversion_macro = "ULONG2NUM($field_local$)";
+                    break;
+                default:
+                    break;
+            }
+
+            printer.Print(
+                ("auto cpp_value = cpp_self->cpp_proto.$field_name$();\n"
+                "return " + conversion_macro + ";\n").c_str(),
+                "field_name", field->name(),
+                "field_local", "cpp_value"
+            );
+
+            printer.Outdent(); printer.Outdent();
+            printer.Print("}\n");
         }
         printer.Print("\n");
     }
@@ -316,27 +389,12 @@ namespace rb_fastproto {
             "}\n"
             "\n"
             "static void mark(char* memory) {\n"
-            "    auto obj = reinterpret_cast<$class_name$*>(memory);\n"
-            "    obj->_mark();\n"
+            "    auto cpp_this = reinterpret_cast<$class_name$*>(memory);\n"
+            "    rb_gc_mark(cpp_this->last_validation_exception);\n"
             "}\n"
             "\n",
             "class_name", class_name
         );
-
-        // The mark function needs to touch all of our value fields
-        printer.Print("void _mark() {\n");
-        printer.Indent(); printer.Indent();
-
-        for (int j = 0; j < message_type->field_count(); j++) {
-            auto field = message_type->field(j);
-
-            printer.Print("rb_gc_mark(this->_field_$field_name$);\n", "field_name", field->name());
-        }
-
-        printer.Outdent(); printer.Outdent();
-        printer.Print("};\n");
-
-        printer.Print("\n");
     }
 
     void RBFastProtoCodeGenerator::write_cpp_message_struct_validator(
@@ -346,63 +404,14 @@ namespace rb_fastproto {
         google::protobuf::io::Printer &printer
     ) const {
         // Implements validate!
-        printer.Print("VALUE _validate() {\n");
-        printer.Indent(); printer.Indent();
-
-        // Validate each field.
-        for (int i = 0; i < message_type->field_count(); i++) {
-            auto field = message_type->field(i);
-
-            std::string numeric_type;
-
-            switch (field->type()) {
-                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
-                    numeric_type = "int32_t";
-                    goto numeric;
-                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
-                    numeric_type = "uint32_t";
-                    goto numeric;
-                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
-                    numeric_type = "int64_t";
-                    goto numeric;
-                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
-                    numeric_type = "uint64_t";
-                    goto numeric;
-                numeric:
-                    printer.Print(
-                        "Check_Type(_field_$field_name$, T_FIXNUM);\n"
-                        "if (\n"
-                        "    FIX2LONG(_field_$field_name$) > std::numeric_limits<$numeric_type$>::max() || \n"
-                        "    FIX2LONG(_field_$field_name$) < std::numeric_limits<$numeric_type$>::min()\n"
-                        " ) {\n"
-                        "    rb_raise(rb_eTypeError, \"Out of range\");\n"
-                        "}\n",
-                        "field_name", field->name(),
-                        "numeric_type", numeric_type
-                    );
-                    break;
-                default:
-                    // Field not implemented?
-                    // Leave it as zero, which is rb_false
-                    break;
-            }
-        }
-
-        printer.Print("return Qnil;\n");
-
-        printer.Outdent(); printer.Outdent();
-        printer.Print("}\n");
-
-        // Define a static version too that ruby can call
         printer.Print(
             "static VALUE validate(VALUE self) {\n"
             "    $class_name$* cpp_self;\n"
             "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
-            "    return cpp_self->_validate();\n"
+            "    if (!NIL_P(cpp_self->last_validation_exception)) {\n"
+            "        rb_exc_raise(cpp_self->last_validation_exception);\n"
+            "    }\n"
+            "    return Qnil;\n"
             "}\n"
             "\n",
             "class_name", class_name
@@ -417,97 +426,46 @@ namespace rb_fastproto {
         google::protobuf::io::Printer &printer
     ) const {
 
-        printer.Print("VALUE _serialize_to_string() {\n");
-        printer.Indent(); printer.Indent();
-
-        // OK. First thing we need to do is validate that our VALUES are as expected
-        printer.Print("_validate();\n");
-        // Now create a C++ message, which backs this one.
-        auto cpp_proto_ns = boost::replace_all_copy(file->package(), ".", "::");
-        auto cpp_proto_cls = message_type->name();
-        printer.Print(
-            "$cpp_proto_ns$::$cpp_proto_cls$ proto;\n",
-            "cpp_proto_ns", cpp_proto_ns,
-            "cpp_proto_cls", cpp_proto_cls
-        );
-
-        // Recursively copy each field over.
-        for (int i = 0; i < message_type->field_count(); i++) {
-            auto field = message_type->field(i);
-
-            std::string numeric_macro;
-
-            switch (field->type()) {
-                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
-                    numeric_macro = "FIX2INT";
-                    goto numeric;
-                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
-                    numeric_macro = "FIX2UINT";
-                    goto numeric;
-                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
-                    numeric_macro = "FIX2LONG";
-                    goto numeric;
-                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
-                    numeric_macro = "FIX2ULONG";
-                    goto numeric;
-                numeric:
-                    printer.Print(
-                        "proto.set_$field_name$($numeric_macro$(_field_$field_name$));\n",
-                        "field_name", field->name(),
-                        "numeric_macro", numeric_macro
-                    );
-                    break;
-                default:
-                    // Field not implemented?
-                    // Leave it as zero, which is rb_false
-                    break;
-            }
-        }
-
-        // Now serialize
-        printer.Print(
-            "auto pb_size = proto.ByteSize();\n"
-            "VALUE rb_str = rb_str_new(\"\", 0);\n"
-            "rb_str_resize(rb_str, pb_size);\n"
-            "auto arg_tuple = std::make_tuple(pb_size, rb_str, &proto);\n"
-            "// We want to call proto.SerializeToArray outside of the ruby GVL.\n"
-            "// We can't convert a lambda that captures to a function pointer, so we\n"
-            "// need to do sick hacks with a std::tuple passing in as our single void* argument\n"
-            "// that we are allowed.\n"
-            "rb_thread_call_without_gvl(\n"
-            "    [](void* args) -> void* {\n"
-            "        auto _arg_tuple = reinterpret_cast<decltype(arg_tuple)*>(args);\n"
-            "        decltype(proto)* _proto;\n"
-            "        VALUE _rb_str;\n"
-            "        decltype(pb_size) _pb_size;\n"
-            "        std::tie(_pb_size, _rb_str, _proto) = *_arg_tuple;\n"
-            "\n"
-            "        _proto->SerializeToArray(RSTRING_PTR(_rb_str), _pb_size);\n"
-            "        return nullptr;\n"
-            "    },\n"
-            "    &arg_tuple, RUBY_UBF_IO, nullptr\n"
-            ");\n"
-            "return rb_str;\n"
-        );
-
-
-        printer.Outdent(); printer.Outdent();
-        printer.Print("}\n");
-
-        // Define a static version too that ruby can call
         printer.Print(
             "static VALUE serialize_to_string(VALUE self) {\n"
             "    $class_name$* cpp_self;\n"
             "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
-            "    return cpp_self->_serialize_to_string();\n"
-            "}\n"
             "\n",
             "class_name", class_name
         );
+        printer.Indent(); printer.Indent();
+
+        printer.Print(
+            "// More function pointer hax to avoid GVL...\n"
+            "struct serialize_args {\n"
+            "    decltype(cpp_self->cpp_proto)* cpp_proto;\n"
+            "    size_t pb_size;\n"
+            "    char* rb_buffer_ptr;\n"
+            "};\n"
+            "\n"
+            "serialize_args args;\n"
+            "args.pb_size = cpp_self->cpp_proto.ByteSize();\n"
+            "VALUE rb_str = rb_str_new(\"\", 0);\n"
+            "rb_str_resize(rb_str, args.pb_size);\n"
+            "args.cpp_proto = &(cpp_self->cpp_proto);\n"
+            "args.rb_buffer_ptr = RSTRING_PTR(rb_str);\n"
+            "\n"
+            "// We want to call proto.SerializeToArray outside of the ruby GVL.\n"
+            "// We can't convert a lambda that captures to a function pointer, so we\n"
+            "// do stupid struct hacks.\n"
+            "rb_thread_call_without_gvl(\n"
+            "    [](void* _args_void) -> void* {\n"
+            "        auto _args = reinterpret_cast<serialize_args*>(_args_void);\n"
+            "        _args->cpp_proto->SerializeToArray(_args->rb_buffer_ptr, static_cast<int>(_args->pb_size));\n"
+            "        return nullptr;\n"
+            "    },\n"
+            "    &args, RUBY_UBF_IO, nullptr\n"
+            ");\n"
+            "return rb_str;\n"
+        );
+
+        printer.Outdent(); printer.Outdent();
+        printer.Print("}\n");
     }
 
     void RBFastProtoCodeGenerator::write_cpp_message_struct_parser(
@@ -516,94 +474,48 @@ namespace rb_fastproto {
         const std::string &class_name,
         google::protobuf::io::Printer &printer
     ) const {
-        printer.Print("VALUE _instance_parse(VALUE io) {\n");
-        printer.Indent(); printer.Indent();
 
-        // Do everything in a block: If stuff raises, we should exit the scope
-        // with a goto to make sure everything gets cleaned up
-
-        // Create a C++ message, which backs this one.
-        auto cpp_proto_ns = boost::replace_all_copy(file->package(), ".", "::");
-        auto cpp_proto_cls = message_type->name();
         printer.Print(
-            "$cpp_proto_ns$::$cpp_proto_cls$ proto;\n"
-            "// Convert the ruby IO to a string\n"
-            "VALUE io_string = rb_funcall(io, rb_intern(\"read\"), 0);\n"
-            "// We want to call proto.ParseFromArray outside of the ruby GVL.\n"
-            "// We can't convert a lambda that captures to a function pointer, so we\n"
-            "// need to do sick hacks with a std::tuple passing in as our single void* argument\n"
-            "// that we are allowed.\n"
-            "auto io_string_len = RSTRING_LEN(io_string);\n"
-            "auto io_string_ptr = RSTRING_PTR(io_string);\n"
-            "auto arg_tuple = std::make_tuple(&proto, io_string_ptr, io_string_len);\n"
-            "rb_thread_call_without_gvl(\n"
-            "    [](void* args) -> void* {\n"
-            "        auto _arg_tuple = reinterpret_cast<decltype(arg_tuple)*>(args);\n"
-            "        decltype(proto)* _proto;\n"
-            "        decltype(io_string_len) _io_string_len;\n"
-            "        decltype(io_string_ptr) _io_string_ptr;\n"
-            "        std::tie(_proto, _io_string_ptr, _io_string_len) = *_arg_tuple;\n"
-            "        _proto->ParseFromArray(_io_string_ptr, static_cast<int>(_io_string_len));\n"
-            "        return nullptr;\n"
-            "    },\n"
-            "    &arg_tuple, RUBY_UBF_IO, nullptr\n"
-            ");\n"
-            "RB_GC_GUARD(io_string);\n",
-            "cpp_proto_ns", cpp_proto_ns,
-            "cpp_proto_cls", cpp_proto_cls
-        );
-
-        // Now recursively copy each field over.
-        for (int i = 0; i < message_type->field_count(); i++) {
-            auto field = message_type->field(i);
-
-            std::string numeric_macro;
-
-            switch (field->type()) {
-                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
-                    numeric_macro = "INT2NUM";
-                    goto numeric;
-                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
-                    numeric_macro = "UINT2NUM";
-                    goto numeric;
-                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
-                    numeric_macro = "LONG2NUM";
-                    goto numeric;
-                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
-                    numeric_macro = "ULONG2NUM";
-                    goto numeric;
-                numeric:
-                    printer.Print(
-                        "_field_$field_name$ = $numeric_macro$(proto.$field_name$());\n",
-                        "field_name", field->name(),
-                        "numeric_macro", numeric_macro
-                    );
-                    break;
-                default:
-                    // Field not implemented?
-                    // Leave it as zero, which is rb_false
-                    break;
-            }
-        }
-
-        printer.Print("return Qnil;\n");
-        printer.Outdent(); printer.Outdent();
-        printer.Print("}\n");
-
-        // Define a static version too that ruby can call
-        printer.Print(
-            "static VALUE instance_parse(VALUE self, VALUE io) {\n"
+            "static VALUE parse(VALUE self, VALUE io) {\n"
             "    $class_name$* cpp_self;\n"
             "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
-            "    return cpp_self->_instance_parse(io);\n"
-            "}\n"
             "\n",
             "class_name", class_name
         );
+        printer.Indent(); printer.Indent();
+
+        printer.Print(
+            "// More function pointer hax to avoid GVL...\n"
+            "struct parse_args {\n"
+            "    decltype(cpp_self->cpp_proto)* cpp_proto;\n"
+            "    size_t pb_size;\n"
+            "    char* rb_buffer_ptr;\n"
+            "};\n"
+            "\n"
+            "parse_args args;\n"
+            "args.cpp_proto = &(cpp_self->cpp_proto);\n"
+            "// Convert the ruby IO to a string\n"
+            "VALUE io_string = rb_funcall(io, rb_intern(\"read\"), 0);\n"
+            "args.pb_size = RSTRING_LEN(io_string);\n"
+            "args.rb_buffer_ptr = RSTRING_PTR(io_string);\n"
+            "\n"
+            "// We want to call proto.ParseFromArray outside of the ruby GVL.\n"
+            "// We can't convert a lambda that captures to a function pointer, so we\n"
+            "// do stupid struct hacks.\n"
+            "rb_thread_call_without_gvl(\n"
+            "    [](void* _args_void) -> void* {\n"
+            "        auto _args = reinterpret_cast<parse_args*>(_args_void);\n"
+            "        _args->cpp_proto->ParseFromArray(_args->rb_buffer_ptr, static_cast<int>(_args->pb_size));\n"
+            "        return nullptr;\n"
+            "    },\n"
+            "    &args, RUBY_UBF_IO, nullptr\n"
+            ");\n"
+            "RB_GC_GUARD(io_string);\n"
+            "return Qnil;\n"
+        );
+
+        printer.Outdent(); printer.Outdent();
+        printer.Print("}\n");
     }
 
     void RBFastProtoCodeGenerator::write_cpp_message_module_init(

@@ -1,5 +1,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/format.hpp>
+#include <iostream>
 #include "rb_fastproto_code_generator.h"
 
 // Some utils for working with filenames et al
@@ -37,5 +39,9 @@ namespace rb_fastproto {
         return header_file_path.string();
     }
 
-
+    std::string cpp_proto_class_name(const google::protobuf::Descriptor* message_type) {
+        auto cpp_proto_ns = boost::replace_all_copy(message_type->file()->package(), ".", "::");
+        auto cpp_proto_cls = message_type->name();
+        return boost::str(boost::format("%s::%s") % cpp_proto_ns % cpp_proto_cls);
+    }
 }
