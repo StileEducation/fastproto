@@ -175,8 +175,16 @@ namespace rb_fastproto {
 
             switch (field->type()) {
                 case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
                     printer.Print("_field_$field_name$ = LONG2FIX(0);\n", "field_name", field->name());
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
+                    printer.Print("_field_$field_name$ = ULONG2FIX(0);\n", "field_name", field->name());
                     break;
                 default:
                     // Field not implemented?
@@ -284,7 +292,7 @@ namespace rb_fastproto {
         // It also needs a static initialize method to use as a factory.
         printer.Print(
             "static VALUE alloc(VALUE self) {\n"
-            "    auto memory = new std::aligned_storage<sizeof($class_name$)>;\n"
+            "    auto memory = ruby_xmalloc(sizeof($class_name$));\n"
             "    // Important: It guarantees that reading have_initialized returns false so we know\n"
             "    // not to run the destructor\n"
             "    std::memset(memory, 0, sizeof($class_name$));\n"
@@ -301,11 +309,10 @@ namespace rb_fastproto {
             "\n"
             "static void free(char* memory) {\n"
             "    auto obj = reinterpret_cast<$class_name$*>(memory);\n"
-            "    if (memory != nullptr && obj->have_initialized) {\n"
-            "        delete obj;\n"
-            "    } else {\n"
-            "        delete memory;\n"
+            "    if (obj->have_initialized) {\n"
+            "        obj->~$class_name$();\n"
             "    }\n"
+            "    ruby_xfree(memory);\n"
             "}\n"
             "\n"
             "static void mark(char* memory) {\n"
@@ -346,18 +353,36 @@ namespace rb_fastproto {
         for (int i = 0; i < message_type->field_count(); i++) {
             auto field = message_type->field(i);
 
+            std::string numeric_type;
+
             switch (field->type()) {
                 case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
+                    numeric_type = "int32_t";
+                    goto numeric;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
                 case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                    numeric_type = "uint32_t";
+                    goto numeric;
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
+                    numeric_type = "int64_t";
+                    goto numeric;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
+                    numeric_type = "uint64_t";
+                    goto numeric;
+                numeric:
                     printer.Print(
                         "Check_Type(_field_$field_name$, T_FIXNUM);\n"
                         "if (\n"
-                        "    FIX2LONG(_field_$field_name$) > std::numeric_limits<int32_t>::max() || \n"
-                        "    FIX2LONG(_field_$field_name$) < std::numeric_limits<int32_t>::min()\n"
+                        "    FIX2LONG(_field_$field_name$) > std::numeric_limits<$numeric_type$>::max() || \n"
+                        "    FIX2LONG(_field_$field_name$) < std::numeric_limits<$numeric_type$>::min()\n"
                         " ) {\n"
                         "    rb_raise(rb_eTypeError, \"Out of range\");\n"
                         "}\n",
-                        "field_name", field->name()
+                        "field_name", field->name(),
+                        "numeric_type", numeric_type
                     );
                     break;
                 default:
@@ -410,10 +435,31 @@ namespace rb_fastproto {
         for (int i = 0; i < message_type->field_count(); i++) {
             auto field = message_type->field(i);
 
+            std::string numeric_macro;
+
             switch (field->type()) {
                 case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
+                    numeric_macro = "FIX2INT";
+                    goto numeric;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
                 case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
-                    printer.Print("proto.set_$field_name$(FIX2INT(_field_$field_name$));\n", "field_name", field->name());
+                    numeric_macro = "FIX2UINT";
+                    goto numeric;
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
+                    numeric_macro = "FIX2LONG";
+                    goto numeric;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
+                    numeric_macro = "FIX2ULONG";
+                    goto numeric;
+                numeric:
+                    printer.Print(
+                        "proto.set_$field_name$($numeric_macro$(_field_$field_name$));\n",
+                        "field_name", field->name(),
+                        "numeric_macro", numeric_macro
+                    );
                     break;
                 default:
                     // Field not implemented?
@@ -511,10 +557,31 @@ namespace rb_fastproto {
         for (int i = 0; i < message_type->field_count(); i++) {
             auto field = message_type->field(i);
 
+            std::string numeric_macro;
+
             switch (field->type()) {
                 case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
+                    numeric_macro = "INT2NUM";
+                    goto numeric;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
                 case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
-                    printer.Print("_field_$field_name$ = INT2NUM(proto.$field_name$());\n", "field_name", field->name());
+                    numeric_macro = "UINT2NUM";
+                    goto numeric;
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
+                    numeric_macro = "LONG2NUM";
+                    goto numeric;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
+                    numeric_macro = "ULONG2NUM";
+                    goto numeric;
+                numeric:
+                    printer.Print(
+                        "_field_$field_name$ = $numeric_macro$(proto.$field_name$());\n",
+                        "field_name", field->name(),
+                        "numeric_macro", numeric_macro
+                    );
                     break;
                 default:
                     // Field not implemented?

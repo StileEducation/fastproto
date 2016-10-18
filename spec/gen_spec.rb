@@ -1,6 +1,10 @@
 require 'spec_helper'
 
 describe 'Generated code' do
+    after(:each) do
+        GC.start(full_mark: true, immediate_sweep: true)
+    end
+
     describe 'the message classes' do
         it 'has been created' do
             expect {
@@ -26,9 +30,11 @@ describe 'Generated code' do
     describe 'validate!' do
         describe 'an int32 field' do
             it 'works with a good int' do
+                100.times do
                 m = ::Fastproto::Test::TestMessageOne.new
                 m.id = 999
-                expect { m.validate! }.to_not raise_error
+                GC.start(full_mark: true, immediate_sweep: true)
+                end
             end
 
             it 'throws when out of range' do
@@ -49,6 +55,20 @@ describe 'Generated code' do
                 expect { m.validate! }.to raise_error(TypeError)
             end
         end
+
+        describe 'an int64 field' do
+            it 'works with a good int' do
+                m = ::Fastproto::Test::TestMessageOne.new
+                m.field_64 = 2**63 - 2
+                expect { m.validate! }.to_not raise_error
+            end
+
+            it 'throws when out of range' do
+                m = ::Fastproto::Test::TestMessageOne.new
+                m.field_64 = 2**63 + 2
+                expect { m.validate! }.to raise_error(TypeError)
+            end
+        end
     end
 
     describe 'serialize_to_string' do
@@ -57,7 +77,7 @@ describe 'Generated code' do
                 m = ::Fastproto::Test::TestMessageOne.new
                 m.id = 4096
                 # Handy tool: http://yura415.github.io/js-protobuf-encode-decode/
-                expect(m.serialize_to_string).to eq("\x08\x80\x20".force_encoding(Encoding::ASCII_8BIT))
+                expect(m.serialize_to_string).to eq("\x08\x80\x20\x10\x00".force_encoding(Encoding::ASCII_8BIT))
             end
         end
     end
