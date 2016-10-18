@@ -115,6 +115,29 @@ describe 'Generated code' do
                 m.parse(StringIO.new("\x08\x80\x20".force_encoding(Encoding::ASCII_8BIT)))
                 expect(m.id).to eql(4096)
             end
+
+            it 'Deserializes optional fields' do
+                m = ::Fastproto::Test::TestMessageOne.new
+                m.parse(StringIO.new("\x08\x80\x20\x10\x03".force_encoding(Encoding::ASCII_8BIT)))
+                expect(m.id).to eql(4096)
+                expect(m.field_64).to eql(3)
+            end
+        end
+
+        describe 'a double field' do
+            it 'deserializes properly' do
+                m = ::Fastproto::Test::TestMessageTwo.new
+                m.parse(StringIO.new("\x19\x7B\x14\xAE\x47\xE1\x00\xB0\x40".force_encoding(Encoding::ASCII_8BIT)))
+                expect(m.double_field).to eql(4096.88)
+            end
+        end
+
+        describe 'a bool field' do
+            it 'deserializes properly' do
+                m = ::Fastproto::Test::TestMessageThree.new
+                m.parse(StringIO.new("\x08\x01".force_encoding(Encoding::ASCII_8BIT)))
+                expect(m.flag).to eql(true)
+            end
         end
     end
 end
