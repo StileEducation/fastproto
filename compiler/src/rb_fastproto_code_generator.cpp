@@ -280,6 +280,10 @@ namespace rb_fastproto {
                     cpp_value_type = "double";
                     conversion_macro = "NUM2DBL($field_local$)";
                     break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
+                    cpp_value_type = "bool";
+                    conversion_macro = "VAL2BOOL_S($field_local$)";
+                    break;
                 default:
                     break;
             }
@@ -351,6 +355,9 @@ namespace rb_fastproto {
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_DOUBLE:
                     conversion_macro = "DBL2NUM($field_local$)";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
+                    conversion_macro = "BOOL2VAL_S($field_local$)";
                     break;
                 default:
                     break;

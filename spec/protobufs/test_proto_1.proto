@@ -11,3 +11,7 @@ message TestMessageTwo {
     optional int64 field_64 = 2;
     optional double double_field = 3;
 }
+
+message TestMessageThree {
+    required bool flag = 1;
+}

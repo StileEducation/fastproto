@@ -77,6 +77,21 @@ namespace rb_fastproto_gen {
         }
         return NUM2LONG(num);
     }
+
+    static inline bool VAL2BOOL_S(VALUE arg) {
+        if (RB_TYPE_P(arg, T_TRUE)) {
+            return true;
+        } else if (RB_TYPE_P(arg, T_FALSE)) {
+            return false;
+        } else {
+            rb_raise(rb_eTypeError, "Expected boolean");
+            return false;
+        }
+    }
+
+    static inline VALUE BOOL2VAL_S(bool arg) {
+        return arg ? Qtrue : Qfalse;
+    }
 }
 
 #endif
