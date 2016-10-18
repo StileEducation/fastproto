@@ -88,6 +88,15 @@ describe 'Generated code' do
                 expect(m.serialize_to_string).to eq("\x08\x80\x20\x10\x00".force_encoding(Encoding::ASCII_8BIT))
             end
         end
+
+        describe 'a double field' do
+            it 'serializes properly' do
+                m = ::Fastproto::Test::TestMessageTwo.new
+                m.double_field = 4096.88
+                # Handy tool: http://yura415.github.io/js-protobuf-encode-decode/
+                expect(m.serialize_to_string).to eq("\x19\x7B\x14\xAE\x47\xE1\x00\xB0\x40".force_encoding(Encoding::ASCII_8BIT))
+            end
+        end
     end
 
     describe 'parse' do

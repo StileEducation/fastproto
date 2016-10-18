@@ -272,6 +272,14 @@ namespace rb_fastproto {
                     cpp_value_type = "uint64_t";
                     conversion_macro = "NUM2ULONG_S($field_local$)";
                     break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_FLOAT:
+                    cpp_value_type = "float";
+                    conversion_macro = "static_cast<float>(NUM2DBL($field_local$))";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_DOUBLE:
+                    cpp_value_type = "double";
+                    conversion_macro = "NUM2DBL($field_local$)";
+                    break;
                 default:
                     break;
             }
@@ -337,6 +345,12 @@ namespace rb_fastproto {
                 case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
                 case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
                     conversion_macro = "ULONG2NUM($field_local$)";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_FLOAT:
+                    conversion_macro = "DBL2NUM($field_local$)";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_DOUBLE:
+                    conversion_macro = "DBL2NUM($field_local$)";
                     break;
                 default:
                     break;
