@@ -253,6 +253,7 @@ namespace rb_fastproto {
             switch (field->type()) {
                 case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
                 case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SINT32:
                     conversion_macro = "NUM2INT_S($field_local$)";
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
@@ -261,6 +262,7 @@ namespace rb_fastproto {
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
                 case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SINT64:
                     conversion_macro = "NUM2LONG_S($field_local$)";
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
@@ -333,6 +335,7 @@ namespace rb_fastproto {
             switch (field->type()) {
                 case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
                 case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SINT32:
                     conversion_macro = "INT2NUM($field_local$)";
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
@@ -341,6 +344,7 @@ namespace rb_fastproto {
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
                 case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SINT64:
                     conversion_macro = "LONG2NUM($field_local$)";
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
