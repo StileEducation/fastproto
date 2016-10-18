@@ -106,6 +106,20 @@ describe 'Generated code' do
                 expect(m.serialize_to_string).to eq("\x08\x01".force_encoding(Encoding::ASCII_8BIT))
             end
         end
+
+        describe 'a string field' do
+            it 'serializes properly' do
+                m = ::Fastproto::Test::TestMessageTwo.new
+                m.str_field = "foo bar"
+                expect(m.serialize_to_string).to eql("\x22\x07\x66\x6F\x6F\x20\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT))
+            end
+
+            it 'serializes properly when it contains nulls' do
+                m = ::Fastproto::Test::TestMessageTwo.new
+                m.str_field = "foo\x00bar"
+                expect(m.serialize_to_string).to eql("\x22\x07\x66\x6F\x6F\x00\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT))
+            end
+        end
     end
 
     describe 'parse' do
@@ -137,6 +151,20 @@ describe 'Generated code' do
                 m = ::Fastproto::Test::TestMessageThree.new
                 m.parse(StringIO.new("\x08\x01".force_encoding(Encoding::ASCII_8BIT)))
                 expect(m.flag).to eql(true)
+            end
+        end
+
+        describe 'a string field' do
+            it 'parses properly' do
+                m = ::Fastproto::Test::TestMessageTwo.new
+                m.parse(StringIO.new("\x22\x07\x66\x6F\x6F\x20\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT)))
+                expect(m.str_field).to eql("foo bar")
+            end
+
+            it 'serializes properly when it contains nulls' do
+                m = ::Fastproto::Test::TestMessageTwo.new
+                m.parse(StringIO.new("\x22\x07\x66\x6F\x6F\x00\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT)))
+                expect(m.str_field).to eql("foo\x00bar")
             end
         end
     end

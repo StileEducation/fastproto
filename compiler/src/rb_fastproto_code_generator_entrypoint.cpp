@@ -136,7 +136,7 @@ namespace rb_fastproto_gen {
 require 'mkmf'
 dir_config('protobuf')
 dir_config('boost')
-$CXXFLAGS << ' --std=c++14'
+$CXXFLAGS << ' --std=c++14 -Wno-shorten-64-to-32'
 $LOCAL_LIBS << ' -lprotobuf'
 # All of our objects are in subdirectories (that match the original proto subdirectories)
 # but mkmf only compiles stuff in the toplevel. Add targets to $objs representing *every*

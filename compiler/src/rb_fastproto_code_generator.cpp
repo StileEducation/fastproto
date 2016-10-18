@@ -249,40 +249,36 @@ namespace rb_fastproto {
             // Depending on the ruby class, we do a different conversion
             // The numeric _S macros are defined in generator_entrypoint.cpp
             // and wrap the ruby macros to disable float-to-int coersion
-            std::string cpp_value_type;
             std::string conversion_macro;
             switch (field->type()) {
                 case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
                 case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
-                    cpp_value_type = "int32_t";
                     conversion_macro = "NUM2INT_S($field_local$)";
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
                 case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
-                    cpp_value_type = "uint32_t";
                     conversion_macro = "NUM2UINT_S($field_local$)";
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
                 case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
-                    cpp_value_type = "int64_t";
                     conversion_macro = "NUM2LONG_S($field_local$)";
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
                 case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
-                    cpp_value_type = "uint64_t";
                     conversion_macro = "NUM2ULONG_S($field_local$)";
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_FLOAT:
-                    cpp_value_type = "float";
                     conversion_macro = "static_cast<float>(NUM2DBL($field_local$))";
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_DOUBLE:
-                    cpp_value_type = "double";
                     conversion_macro = "NUM2DBL($field_local$)";
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
-                    cpp_value_type = "bool";
                     conversion_macro = "VAL2BOOL_S($field_local$)";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_STRING:
+                    // Sneaky sneaky: pass two arguments to set_stringfield()
+                    conversion_macro = "RSTRING_PTR($field_local$), RSTRING_LEN($field_local$)";
                     break;
                 default:
                     break;
@@ -292,29 +288,29 @@ namespace rb_fastproto {
             // that gets raised in the conversion macro and re-raise it when validate! is called.
             printer.Print(
                 ("struct dangerous_func_data {\n"
-                "    $cpp_value_type$ converted_value;\n"
+                "    decltype(cpp_self->cpp_proto)* cpp_proto;\n"
                 "    VALUE value_to_convert;\n"
                 "};\n"
                 "auto dangerous_func = [](VALUE data_as_value) -> VALUE {\n"
                 "    // Unwrap our 'VALUE' into an actual pointer\n"
                 "    auto data = reinterpret_cast<dangerous_func_data*>(NUM2ULONG(data_as_value));\n"
-                "    data->converted_value = " + conversion_macro + ";\n"
+                "    data->cpp_proto->set_$field_name$(" + conversion_macro + ");\n"
                 "    return Qnil;\n"
                 "};\n"
                 "int exc_status;\n"
                 "dangerous_func_data data_struct;\n"
                 "data_struct.value_to_convert = val;\n"
+                "data_struct.cpp_proto = &(cpp_self->cpp_proto);\n"
                 "rb_protect(dangerous_func, ULONG2NUM(reinterpret_cast<uint64_t>(&data_struct)), &exc_status);\n"
                 "if (exc_status) {\n"
                 "    // Exception!\n"
                 "    cpp_self->last_validation_exception = rb_errinfo();\n"
                 "    rb_set_errinfo(Qnil);\n"
                 "} else {\n"
-                "     cpp_self->cpp_proto.set_$field_name$(data_struct.converted_value);\n"
+                "    // cpp_proto has its field set\n"
                 "}").c_str(),
                 "field_name", field->name(),
-                "field_local", "data->value_to_convert",
-                "cpp_value_type", cpp_value_type
+                "field_local", "data->value_to_convert"
             );
 
             printer.Print("return Qnil;\n");
@@ -358,6 +354,11 @@ namespace rb_fastproto {
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
                     conversion_macro = "BOOL2VAL_S($field_local$)";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_STRING:
+                    // Important to use the length, because .data() also has a terminating
+                    // null byte.
+                    conversion_macro = "rb_str_new($field_local$.data(), static_cast<int>($field_local$.length()))";
                     break;
                 default:
                     break;
