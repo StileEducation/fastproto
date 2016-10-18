@@ -11,6 +11,7 @@ message TestMessageTwo {
     optional int64 field_64 = 2;
     optional double double_field = 3;
     optional string str_field = 4;
+    optional bytes byte_field = 5;
 }
 
 message TestMessageThree {

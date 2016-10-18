@@ -276,6 +276,7 @@ namespace rb_fastproto {
                 case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
                     conversion_macro = "VAL2BOOL_S($field_local$)";
                     break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_BYTES:
                 case google::protobuf::FieldDescriptor::Type::TYPE_STRING:
                     // Sneaky sneaky: pass two arguments to set_stringfield()
                     conversion_macro = "RSTRING_PTR($field_local$), RSTRING_LEN($field_local$)";
@@ -355,6 +356,7 @@ namespace rb_fastproto {
                 case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
                     conversion_macro = "BOOL2VAL_S($field_local$)";
                     break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_BYTES:
                 case google::protobuf::FieldDescriptor::Type::TYPE_STRING:
                     // Important to use the length, because .data() also has a terminating
                     // null byte.
