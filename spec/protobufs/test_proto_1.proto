@@ -17,3 +17,7 @@ message TestMessageTwo {
 message TestMessageThree {
     required bool flag = 1;
 }
+
+message TestMessageFour {
+    repeated int32 numbers = 1;
+}

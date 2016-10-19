@@ -79,6 +79,29 @@ describe 'Generated code' do
         end
     end
 
+    describe 'defaults' do
+        it 'defaults integers correctly' do
+            m = ::Fastproto::TestProtos::TestMessageOne.new
+            expect(m.id).to eql(0)
+        end
+
+        it 'defaults doubles correclty' do
+            m = ::Fastproto::TestProtos::TestMessageTwo.new
+            expect(m.double_field).to eql(0.0)
+        end
+
+        it 'defaults strings correctly' do
+            m = ::Fastproto::TestProtos::TestMessageTwo.new
+            expect(m.str_field).to eql("")
+        end
+
+        it 'defaults repeateds correctly' do
+            m = ::Fastproto::TestProtos::TestMessageFour.new
+            expect(m.numbers).to be_a(Array)
+            expect(m.numbers.size).to eql(0)
+        end
+    end
+
     describe 'serialize_to_string' do
         describe 'an int32 field' do
             it 'serializes properly' do
