@@ -33,6 +33,13 @@ describe 'Generated code' do
             s << " baz"
             expect(m.str_field).to eql("foo bar baz")
         end
+
+        it 'has reference semantics with arrays' do
+            m = ::Fastproto::TestProtos::TestMessageFour.new
+            m.numbers = [5, 10, 15]
+            m.numbers << 787 << 44
+            expect(m.numbers).to eql([5, 10, 15, 787, 44])
+        end
     end
 
     describe 'validate!' do
@@ -178,6 +185,19 @@ describe 'Generated code' do
                 m = ::Fastproto::TestProtos::TestMessageTwo.new
                 m.byte_field = "foo bar"
                 expect(m.serialize_to_string).to eql("\x2A\x07\x66\x6F\x6F\x20\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT))
+            end
+        end
+
+        describe 'repeated ints' do
+            it 'serializes properly' do
+                m = ::Fastproto::TestProtos::TestMessageFour.new
+                m.numbers = [99, 77, 55, 32, 9988]
+                expect(m.serialize_to_string).to eql("\x08\x63\x08\x4D\x08\x37\x08\x20\x08\x84\x4E".force_encoding(Encoding::ASCII_8BIT))
+            end
+
+            it 'serializes empty properly' do
+                m = ::Fastproto::TestProtos::TestMessageFour.new
+                expect(m.serialize_to_string).to eql("")
             end
         end
     end

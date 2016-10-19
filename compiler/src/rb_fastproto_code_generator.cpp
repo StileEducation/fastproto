@@ -628,78 +628,96 @@ namespace rb_fastproto {
             auto field = message_type->field(j);
 
             if (field->is_repeated()) {
-                // TODO...
-            } else {
+                // Loop the array into the protobuf.
+                printer.Print(
+                    "for (\n"
+                    "    const VALUE* array_el = rb_array_const_ptr(_self->field_$field_name$);\n"
+                    "    array_el < rb_array_const_ptr(_self->field_$field_name$) + rb_array_len(_self->field_$field_name$);\n"
+                    "    array_el++\n"
+                    ") {\n",
+                    "field_name", field->name()
+                );
+            } else if (field->is_optional()) {
                 // Do nothing if the field is not set
-                if (field->is_required()) {
-                    printer.Print("if (true) {\n");
-                } else {
-                    printer.Print("if (_self->has_field_$field_name$) {\n", "field_name", field->name());
-                }
-                printer.Indent(); printer.Indent();
+                printer.Print("if (_self->has_field_$field_name$) {\n", "field_name", field->name());
+            } else {
+                printer.Print("if (true) {\n");
+            }
+            printer.Indent(); printer.Indent();
 
-                // Depending on the ruby class, we do a different conversion
-                // The numeric _S macros are defined in generator_entrypoint.cpp
-                // and wrap the ruby macros to disable float-to-int coersion
-                switch (field->type()) {
-                    case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_SINT32:
-                        printer.Print("_cpp_proto->set_$field_name$(NUM2INT_S(_self->field_$field_name$));\n", "field_name", field->name());
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
-                    printer.Print("_cpp_proto->set_$field_name$(NUM2UINT_S(_self->field_$field_name$));\n", "field_name", field->name());
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_SINT64:
-                    printer.Print("_cpp_proto->set_$field_name$(NUM2LONG_S(_self->field_$field_name$));\n", "field_name", field->name());
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
-                    printer.Print("_cpp_proto->set_$field_name$(NUM2ULONG_S(_self->field_$field_name$));\n", "field_name", field->name());
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_FLOAT:
-                        printer.Print(
-                            "_cpp_proto->set_$field_name$(static_cast<float>(NUM2DBL(_self->field_$field_name$)));\n",
-                            "field_name", field->name()
-                        );
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_DOUBLE:
-                        printer.Print(
-                            "_cpp_proto->set_$field_name$(NUM2DBL(_self->field_$field_name$));\n",
-                            "field_name", field->name()
-                        );
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
-                        printer.Print("_cpp_proto->set_$field_name$(VAL2BOOL_S(_self->field_$field_name$));\n", "field_name", field->name());
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_BYTES:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_STRING:
-                        // Pass two arguments to set_stringfield()
-                        printer.Print(
-                            "_cpp_proto->set_$field_name$(\n"
-                            "    RSTRING_PTR(_self->field_$field_name$),\n"
-                            "    RSTRING_LEN(_self->field_$field_name$)\n"
-                            ");\n",
-                            "field_name", field->name()
-                        );
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_MESSAGE:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_GROUP:
-                        // Recurse to serialize the message
-                        // TODO: Needs to access the type of the dependant message.
-                        break;
-                    default:
-                        break;
-                }
+            // Depending on the ruby class, we do a different conversion
+            // The numeric _S macros are defined in generator_entrypoint.cpp
+            // and wrap the ruby macros to disable float-to-int coersion
+            std::string single_op;
+            std::string repeated_op;
+            switch (field->type()) {
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SINT32:
+                    single_op = "_cpp_proto->set_$field_name$(NUM2INT_S(_self->field_$field_name$));\n";
+                    repeated_op = "_cpp_proto->add_$field_name$(NUM2INT_S(*array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                    single_op = "_cpp_proto->set_$field_name$(NUM2UINT_S(_self->field_$field_name$));\n";
+                    repeated_op = "_cpp_proto->add_$field_name$(NUM2UINT_S(*array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SINT64:
+                    single_op = "_cpp_proto->set_$field_name$(NUM2LONG_S(_self->field_$field_name$));\n";
+                    repeated_op = "_cpp_proto->add_$field_name$(NUM2LONG_S(*array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
+                    single_op = "_cpp_proto->set_$field_name$(NUM2ULONG_S(_self->field_$field_name$));\n";
+                    repeated_op = "_cpp_proto->add_$field_name$(NUM2ULONG_S(*array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_FLOAT:
+                    single_op = "_cpp_proto->set_$field_name$(static_cast<float>(NUM2DBL(_self->field_$field_name$)));\n";
+                    repeated_op = "_cpp_proto->add_$field_name$(static_cast<float>(NUM2DBL(*array_el)));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_DOUBLE:
+                    single_op = "_cpp_proto->set_$field_name$(NUM2DBL(_self->field_$field_name$));\n";
+                    repeated_op = "_cpp_proto->add_$field_name$(NUM2DBL(*array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
+                    single_op = "_cpp_proto->set_$field_name$(VAL2BOOL_S(_self->field_$field_name$));\n";
+                    repeated_op = "_cpp_proto->add_$field_name$(VAL2BOOL_S(*array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_BYTES:
+                case google::protobuf::FieldDescriptor::Type::TYPE_STRING:
+                    // Pass two arguments to set_stringfield()
+                    single_op = (
+                        "_cpp_proto->set_$field_name$(\n"
+                        "    RSTRING_PTR(_self->field_$field_name$),\n"
+                        "    RSTRING_LEN(_self->field_$field_name$)\n"
+                        ");\n"
+                    );
+                    repeated_op = (
+                        "_cpp_proto->add_$field_name$(\n"
+                        "    RSTRING_PTR(*array_el),\n"
+                        "    RSTRING_LEN(*array_el)\n"
+                        ");\n"
+                    );
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_MESSAGE:
+                case google::protobuf::FieldDescriptor::Type::TYPE_GROUP:
+                    // Recurse to serialize the message
+                    // TODO: Needs to access the type of the dependant message.
+                    break;
+                default:
+                    break;
+            }
 
-                printer.Outdent(); printer.Outdent();
+            printer.Print((field->is_repeated() ? repeated_op : single_op).c_str(), "field_name", field->name());
+
+            printer.Outdent(); printer.Outdent();
+            if (field->is_optional()) {
                 printer.Print("} else {\n"); // close of if (required | set)
                 printer.Print("    _cpp_proto->clear_$field_name$();\n", "field_name", field->name());
-                printer.Print("}\n");
             }
+            printer.Print("}\n");
         }
 
         printer.Print("return Qnil;\n");
@@ -746,67 +764,77 @@ namespace rb_fastproto {
             auto field = message_type->field(j);
 
             if (field->is_repeated()) {
-                // TODO
-            } else {
+                printer.Print(
+                    "// Initialize the array to the right size.\n"
+                    "field_$field_name$ = rb_ary_new_capa(cpp_proto.$field_name$_size());\n"
+                    "for (auto&& array_el : cpp_proto.$field_name$()) {\n",
+                    "field_name", field->name()
+                );
+            } else if (field->is_optional()) {
                 // Do nothing if the field is not set
-                if (field->is_required()) {
-                    printer.Print("if (true) {\n");
-                } else {
-                    printer.Print("if (cpp_proto.has_$field_name$()) {\n", "field_name", field->name());
-                }
-                printer.Indent(); printer.Indent();
-
-                switch (field->type()) {
-                    case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_SINT32:
-                        printer.Print("field_$field_name$ = INT2NUM(cpp_proto.$field_name$());\n", "field_name", field->name());
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
-                        printer.Print("field_$field_name$ = UINT2NUM(cpp_proto.$field_name$());\n", "field_name", field->name());
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_SINT64:
-                        printer.Print("field_$field_name$ = LONG2NUM(cpp_proto.$field_name$());\n", "field_name", field->name());
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
-                        printer.Print("field_$field_name$ = ULONG2NUM(cpp_proto.$field_name$());\n", "field_name", field->name());
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_FLOAT:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_DOUBLE:
-                        printer.Print("field_$field_name$ = DBL2NUM(cpp_proto.$field_name$());\n", "field_name", field->name());
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
-                        printer.Print("field_$field_name$ = BOOL2VAL_S(cpp_proto.$field_name$());\n", "field_name", field->name());
-                        break;
-                    case google::protobuf::FieldDescriptor::Type::TYPE_BYTES:
-                    case google::protobuf::FieldDescriptor::Type::TYPE_STRING:
-                        // Important to use the length, because .data() also has a terminating
-                        // null byte.
-                        printer.Print(
-                            "field_$field_name$ = rb_str_new(cpp_proto.$field_name$().data(), cpp_proto.$field_name$().length());\n",
-                            "field_name", field->name()
-                        );
-                        break;
-                    default:
-                        break;
-                }
-
-                if (field->is_optional()) {
-                    printer.Print("has_field_$field_name$ = true;\n", "field_name", field->name());
-                }
-
-
-                printer.Outdent(); printer.Outdent();
-                printer.Print("} else {\n"); // close of if (required | set)
-                if (field->is_optional()) {
-                    printer.Print("   has_field_$field_name$ = false;\n", "field_name", field->name());
-                }
-                printer.Print("}\n");
+                printer.Print("if (cpp_proto.has_$field_name$()) {\n", "field_name", field->name());
+            } else {
+                printer.Print("if (true) {\n");
             }
+            printer.Indent(); printer.Indent();
+
+            std::string single_op;
+            std::string repeated_op;
+            switch (field->type()) {
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SINT32:
+                    single_op = "field_$field_name$ = INT2NUM(cpp_proto.$field_name$());\n";
+                    repeated_op = "rb_ary_push(field_$field_name$, INT2NUM(array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                    single_op = "field_$field_name$ = UINT2NUM(cpp_proto.$field_name$());\n";
+                    repeated_op = "rb_ary_push(field_$field_name$, UINT2NUM(array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SINT64:
+                    single_op = "field_$field_name$ = LONG2NUM(cpp_proto.$field_name$());\n";
+                    repeated_op = "rb_ary_push(field_$field_name$, LONG2NUM(array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
+                    single_op = "field_$field_name$ = ULONG2NUM(cpp_proto.$field_name$());\n";
+                    repeated_op = "rb_ary_push(field_$field_name$, ULONG2NUM(array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_FLOAT:
+                case google::protobuf::FieldDescriptor::Type::TYPE_DOUBLE:
+                    single_op = "field_$field_name$ = DBL2NUM(cpp_proto.$field_name$());\n";
+                    repeated_op = "rb_ary_push(field_$field_name$, DBL2NUM(array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
+                    single_op = "field_$field_name$ = BOOL2VAL_S(cpp_proto.$field_name$());\n";
+                    repeated_op = "rb_ary_push(field_$field_name$, BOOL2VAL_S(array_el));\n";
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_BYTES:
+                case google::protobuf::FieldDescriptor::Type::TYPE_STRING:
+                    // Important to use the length, because .data() also has a terminating
+                    // null byte.
+                    single_op = "field_$field_name$ = rb_str_new(cpp_proto.$field_name$().data(), cpp_proto.$field_name$().length());\n";
+                    repeated_op = "rb_ary_push(field_$field_name$, rb_str_new(array_el.data(), array_el.length()));\n";
+                    break;
+                default:
+                    break;
+            }
+
+            printer.Print((field->is_repeated() ? repeated_op : single_op).c_str(), "field_name", field->name());
+            if (field->is_optional()) {
+                printer.Print("has_field_$field_name$ = true;\n", "field_name", field->name());
+            }
+
+
+            printer.Outdent(); printer.Outdent();
+            if (field->is_optional()) {
+                printer.Print("} else {\n"); // close of if (required | set)
+                printer.Print("   has_field_$field_name$ = false;\n", "field_name", field->name());
+            }
+            printer.Print("}\n");
         }
 
         printer.Print("return Qnil;\n");

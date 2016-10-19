@@ -1,4 +1,5 @@
 #include <ruby/ruby.h>
+#include <ruby/encoding.h>
 #include <functional>
 
 #ifndef __RB_FASTPROTO_INIT_H
@@ -52,6 +53,11 @@ namespace rb_fastproto_gen {
 
     static inline VALUE BOOL2VAL_S(bool arg) {
         return arg ? Qtrue : Qfalse;
+    }
+
+    static inline VALUE RSTR_AS_UTF8(VALUE rstr) {
+        rb_enc_associate_index(rstr, rb_enc_find_index("UTF-8"));
+        return rstr;
     }
 }
 
