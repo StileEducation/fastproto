@@ -23,7 +23,7 @@ ADD_EXECUTABLE (rb_fastproto_compiler
     ${COMPILED_RUNTIME_RESOURCES}
     src/protoc_gen_rb_fastproto.cpp
     src/rb_fastproto_code_generator.cpp
-    src/rb_fastproto_code_generator_utils.cpp
+    src/rb_fastproto_code_generator_names.cpp
     src/rb_fastproto_code_generator_entrypoint.cpp
 )
 TARGET_LINK_LIBRARIES (rb_fastproto_compiler

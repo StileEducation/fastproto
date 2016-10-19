@@ -36,6 +36,13 @@ namespace rb_fastproto {
         const google::protobuf::FileDescriptor *file,
         google::protobuf::io::Printer &printer
     ) const {
+
+        printer.Print(
+            "#include <ruby/ruby.h>\n"
+            "#include \"$pb_header_name$\"\n"
+            "\n",
+            "pb_header_name", cpp_proto_header_path_for_proto(file)
+        );
         // Write an include guard in the header
         printer.Print(
             "#ifndef __$header_file_name$_H\n"
@@ -54,11 +61,118 @@ namespace rb_fastproto {
             "header_file_name", header_name_as_identifier(file)
         );
 
+        // We need to export our classes in the header file, so that other messages can
+        // serialize this one as a part of their operation.
+        for (int i = 0; i < file->message_type_count(); i++) {
+            auto message_type = file->message_type(i);
+            write_header_message_struct_definition(file, message_type, printer);
+        }
+
+
         printer.Outdent(); printer.Outdent();
         printer.Print(
             "}\n"
             "#endif\n"
         );
+    }
+
+
+    void RBFastProtoCodeGenerator::write_header_message_struct_definition(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        google::protobuf::io::Printer &printer
+    ) const {
+        auto class_name = cpp_proto_wrapper_struct_name(message_type);
+        printer.Print("struct $class_name$ {\n", "class_name", class_name);
+        printer.Indent(); printer.Indent();
+
+        // Fields that every message has
+        printer.Print(
+            "// Keep this so we know whether to delete a char array of memory, or delete the object\n"
+            "// (thereby invoking its constructor)\n"
+            "bool have_initialized;\n"
+            "static VALUE rb_cls;\n"
+        );
+        // Write fields for the message field
+        write_header_message_struct_fields(file, message_type, class_name, printer);
+
+        // Constructor declarations.
+        printer.Print(
+            "\n\n"
+            "// The default constructor will make a default message.\n"
+            "$class_name$();\n"
+            "~$class_name$() = default;\n"
+            "\n",
+            "class_name", class_name
+        );
+
+        // Static methods...
+        printer.Print(
+            "// methods whose implementations will control ruby lifecycle stuff\n"
+            "static void initialize_class();\n"
+            "static VALUE alloc(VALUE self);\n"
+            "static VALUE initialize(VALUE self);\n"
+            "static void free(char* memory);\n"
+            "static void mark(char* memory);\n"
+            "\n"
+            "static VALUE validate(VALUE self);\n"
+            "static VALUE serialize_to_string(VALUE self);\n"
+            "static VALUE parse(VALUE self, VALUE buffer);\n"
+            "\n"
+            "VALUE to_proto_obj($cpp_proto_class$* cpp_proto);\n"
+            "VALUE from_proto_obj(const $cpp_proto_class$& cpp_proto);\n",
+            "cpp_proto_class", cpp_proto_class_name(message_type)
+        );
+
+        // various methods defined for each protobuf field, like getters & setters
+        write_header_message_struct_accessors(file, message_type, class_name, printer);
+
+        printer.Outdent(); printer.Outdent();
+        printer.Print("};\n\n");
+    }
+
+    void RBFastProtoCodeGenerator::write_header_message_struct_fields(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        // Write a VALUE for each field to store the ruby-version of it.
+        // Also a bool to store whether or not it is set.
+        for (int j = 0; j < message_type->field_count(); j++) {
+            auto field = message_type->field(j);
+
+            printer.Print("VALUE field_$field_name$;\n", "field_name", field->name());
+            if (field->is_optional()) {
+                printer.Print("bool has_field_$field_name$;\n", "field_name", field->name());
+            }
+        }
+    }
+
+    void RBFastProtoCodeGenerator::write_header_message_struct_accessors(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        for (int j = 0; j < message_type->field_count(); j++) {
+            auto field = message_type->field(j);
+
+            // Every method needs a getter, setter, and a factory for constructing a default
+            printer.Print(
+                "static VALUE get_$field_name$(VALUE self);\n"
+                "static VALUE set_$field_name$(VALUE self, VALUE val);\n"
+                "static VALUE default_factory_$field_name$(bool constructor);\n"
+                "\n",
+                "field_name", field->name()
+            );
+
+            // Optional fields need has_? too
+            if (field->is_optional()) {
+                printer.Print("VALUE has_$field_name$(VALUE self);\n", "field_name", field->name());
+            }
+            printer.Print("\n");
+        }
     }
 
     void RBFastProtoCodeGenerator::write_cpp(
@@ -114,21 +228,8 @@ namespace rb_fastproto {
     ) const {
         // This bit is responsible for writing out the message struct.
 
-        // Prefix the class name so we don't collide with the C++ generatec code.
-        std::string class_name(message_type->name());
-        class_name.insert(0, "RB");
+        auto class_name = cpp_proto_wrapper_struct_name(message_type);
 
-        // Define a struct that ruby will wrap for this class.
-        // note that we do this in here, not in the header file, because the names might not
-        // be unique so we really don't want to export these symbols
-        printer.Print(
-            "struct $class_name$ {\n",
-            "class_name", class_name
-        );
-        printer.Indent(); printer.Indent();
-
-        // Fields for each message field
-        write_cpp_message_struct_fields(file, message_type, class_name, printer);
         // The instance constructor for a protobuf message
         write_cpp_message_struct_constructor(file, message_type, class_name, printer);
         // a static method that defines this class in rubyland
@@ -150,31 +251,10 @@ namespace rb_fastproto {
         // Desserialization methods
         write_cpp_message_struct_parser(file, message_type, class_name, printer);
 
-        printer.Outdent(); printer.Outdent();
-        printer.Print("};\n");
-
         // For some silly reason we need to initialized its static members at translation-unit scope?
         printer.Print("VALUE $class_name$::rb_cls = Qnil;\n", "class_name", class_name);
 
         return class_name;
-    }
-
-    void RBFastProtoCodeGenerator::write_cpp_message_struct_fields(
-        const google::protobuf::FileDescriptor* file,
-        const google::protobuf::Descriptor* message_type,
-        const std::string &class_name,
-        google::protobuf::io::Printer &printer
-    ) const {
-        // Write a VALUE for each field to store the ruby-version of it.
-        // Also a bool to store whether or not it is set.
-        for (int j = 0; j < message_type->field_count(); j++) {
-            auto field = message_type->field(j);
-
-            printer.Print("VALUE field_$field_name$;\n", "field_name", field->name());
-            if (field->is_optional()) {
-                printer.Print("bool has_$field_name$;\n", "field_name", field->name());
-            }
-        }
     }
 
     void RBFastProtoCodeGenerator::write_cpp_message_struct_constructor(
@@ -185,11 +265,7 @@ namespace rb_fastproto {
     ) const {
         // Object constructor; called in ruby initialize method.
         printer.Print(
-            "// Keep this so we know whether to delete a char array of memory, or delete the object\n"
-            "// (thereby invoking its constructor)\n"
-            "bool have_initialized;\n"
-            "\n"
-            "$class_name$() : have_initialized(true) { \n",
+            "$class_name$::$class_name$() : have_initialized(true) { \n",
             "class_name", class_name
         );
 
@@ -203,7 +279,7 @@ namespace rb_fastproto {
 
             // If the field is optional, we need to set the has or not status of it
             if (field->is_optional()) {
-                printer.Print("has_$field_name$ = false;\n", "field_name", field->name());
+                printer.Print("has_field_$field_name$ = false;\n", "field_name", field->name());
             }
         }
         printer.Outdent(); printer.Outdent();
@@ -219,8 +295,8 @@ namespace rb_fastproto {
         // Defines the static initialize_class method for this struct
 
         printer.Print(
-            "static VALUE rb_cls;\n"
-            "static void initialize_class() {\n"
+            "void $class_name$::initialize_class() {\n",
+            "class_name", class_name
         );
         printer.Indent(); printer.Indent();
 
@@ -261,7 +337,7 @@ namespace rb_fastproto {
         // It also needs a static initialize method to use as a factory.
 
         printer.Print(
-            "static VALUE alloc(VALUE self) {\n"
+            "VALUE $class_name$::alloc(VALUE self) {\n"
             "    auto memory = ruby_xmalloc(sizeof($class_name$));\n"
             "    // Important: It guarantees that reading have_initialized returns false so we know\n"
             "    // not to run the destructor\n"
@@ -269,7 +345,7 @@ namespace rb_fastproto {
             "    return Data_Wrap_Struct(self, &mark, &free, memory);\n"
             "}\n"
             "\n"
-            "static VALUE initialize(VALUE self) {\n"
+            "VALUE $class_name$::initialize(VALUE self) {\n"
             "    // Use placement new to create the object\n"
             "    void* memory;\n"
             "    Data_Get_Struct(self, void*, memory);\n"
@@ -277,7 +353,7 @@ namespace rb_fastproto {
             "    return self;\n"
             "}\n"
             "\n"
-            "static void free(char* memory) {\n"
+            "void $class_name$::free(char* memory) {\n"
             "    auto obj = reinterpret_cast<$class_name$*>(memory);\n"
             "    if (obj->have_initialized) {\n"
             "        obj->~$class_name$();\n"
@@ -285,7 +361,7 @@ namespace rb_fastproto {
             "    ruby_xfree(memory);\n"
             "}\n"
             "\n"
-            "static void mark(char* memory) {\n"
+            "void $class_name$::mark(char* memory) {\n"
             "    auto cpp_this = reinterpret_cast<$class_name$*>(memory);\n"
             "\n",
             "class_name", class_name
@@ -320,7 +396,11 @@ namespace rb_fastproto {
         for (int j = 0; j < message_type->field_count(); j++) {
             auto field = message_type->field(j);
 
-            printer.Print("static VALUE default_factory_$field_name$(bool constructor) {\n", "field_name", field->name());
+            printer.Print(
+                "VALUE $class_name$::default_factory_$field_name$(bool constructor) {\n",
+                "field_name", field->name(),
+                "class_name", class_name
+            );
             printer.Indent(); printer.Indent();
 
             if (field->is_repeated()) {
@@ -400,7 +480,7 @@ namespace rb_fastproto {
             auto field = message_type->field(j);
 
             printer.Print(
-                "static VALUE set_$field_name$(VALUE self, VALUE val) {\n"
+                "VALUE $class_name$::set_$field_name$(VALUE self, VALUE val) {\n"
                 "    $class_name$* cpp_self;\n"
                 "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
                 "\n",
@@ -415,7 +495,7 @@ namespace rb_fastproto {
 
             printer.Print("cpp_self->field_$field_name$ = default_factory_$field_name$(false);\n", "field_name", field->name());
             if (field->is_optional()) {
-                printer.Print("cpp_self->has_$field_name$ = false;\n", "field_name", field->name());
+                printer.Print("cpp_self->has_field_$field_name$ = false;\n", "field_name", field->name());
             }
 
             printer.Outdent(); printer.Outdent();
@@ -428,7 +508,7 @@ namespace rb_fastproto {
             printer.Print("cpp_self->field_$field_name$ = val;\n", "field_name", field->name());
 
             if (field->is_optional()) {
-                printer.Print("cpp_self->has_$field_name$ = true;\n", "field_name", field->name());
+                printer.Print("cpp_self->has_field_$field_name$ = true;\n", "field_name", field->name());
             }
 
 
@@ -442,7 +522,7 @@ namespace rb_fastproto {
 
             // We also need a getter.
             printer.Print(
-                "static VALUE get_$field_name$(VALUE self) {\n"
+                "VALUE $class_name$::get_$field_name$(VALUE self) {\n"
                 "    $class_name$* cpp_self;\n"
                 "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
                 "\n",
@@ -464,6 +544,19 @@ namespace rb_fastproto {
 
             printer.Outdent(); printer.Outdent();
             printer.Print("}\n");
+
+            // Maybe a has_? as well
+            if (field->is_optional()) {
+                printer.Print(
+                    "VALUE $class_name$::has_$field_name$(VALUE self) {\n"
+                    "    $class_name$* cpp_self;\n"
+                    "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
+                    "    return cpp_self->has_field_$field_name$ ? Qtrue : Qfalse; \n"
+                    "}\n\n",
+                    "field_name", field->name(),
+                    "class_name", class_name
+                );
+            }
         }
     }
 
@@ -478,8 +571,9 @@ namespace rb_fastproto {
         // Returns any exception that happened, or Qnil.
 
         printer.Print(
-            "VALUE to_proto_obj($cpp_proto_type$* cpp_proto) {\n",
-            "cpp_proto_type", cpp_proto_class_name(message_type)
+            "VALUE $class_name$::to_proto_obj($cpp_proto_type$* cpp_proto) {\n",
+            "cpp_proto_type", cpp_proto_class_name(message_type),
+            "class_name", class_name
         );
         printer.Indent(); printer.Indent();
 
@@ -513,7 +607,7 @@ namespace rb_fastproto {
                 if (field->is_required()) {
                     printer.Print("if (true) {\n");
                 } else {
-                    printer.Print("if (_self->has_$field_name$) {\n", "field_name", field->name());
+                    printer.Print("if (_self->has_field_$field_name$) {\n", "field_name", field->name());
                 }
                 printer.Indent(); printer.Indent();
 
@@ -615,8 +709,9 @@ namespace rb_fastproto {
         // Defines a from_proto_obj that takes a protobuf object and sets our VALUES
         // from it.
         printer.Print(
-            "VALUE from_proto_obj(const $cpp_proto_type$& cpp_proto) {\n",
-            "cpp_proto_type", cpp_proto_class_name(message_type)
+            "VALUE $class_name$::from_proto_obj(const $cpp_proto_type$& cpp_proto) {\n",
+            "cpp_proto_type", cpp_proto_class_name(message_type),
+            "class_name", class_name
         );
         printer.Indent(); printer.Indent();
 
@@ -674,14 +769,14 @@ namespace rb_fastproto {
                 }
 
                 if (field->is_optional()) {
-                    printer.Print("has_$field_name$ = true;\n", "field_name", field->name());
+                    printer.Print("has_field_$field_name$ = true;\n", "field_name", field->name());
                 }
 
 
                 printer.Outdent(); printer.Outdent();
                 printer.Print("} else {\n"); // close of if (required | set)
                 if (field->is_optional()) {
-                    printer.Print("   has_$field_name$ = false;\n", "field_name", field->name());
+                    printer.Print("   has_field_$field_name$ = false;\n", "field_name", field->name());
                 }
                 printer.Print("}\n");
             }
@@ -700,7 +795,7 @@ namespace rb_fastproto {
     ) const {
         // Implements validate!
         printer.Print(
-            "static VALUE validate(VALUE self) {\n"
+            "VALUE $class_name$::validate(VALUE self) {\n"
             "    VALUE ex;\n"
             "    {\n"
             "        $class_name$* cpp_self;\n"
@@ -730,7 +825,7 @@ namespace rb_fastproto {
     ) const {
 
         printer.Print(
-            "static VALUE serialize_to_string(VALUE self) {\n"
+            "VALUE $class_name$::serialize_to_string(VALUE self) {\n"
             "    VALUE ex;\n"
             "    // More function pointer hax to avoid GVL...\n"
             "    struct serialize_args {\n"
@@ -784,7 +879,7 @@ namespace rb_fastproto {
     ) const {
 
         printer.Print(
-            "static VALUE parse(VALUE self, VALUE buffer) {\n"
+            "VALUE $class_name$::parse(VALUE self, VALUE buffer) {\n"
             "    // VALUE ex;\n"
             "    // More function pointer hax to avoid GVL...\n"
             "    struct parse_args {\n"

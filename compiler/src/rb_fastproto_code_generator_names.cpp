@@ -52,4 +52,18 @@ namespace rb_fastproto {
         cls_name += message_type->name();
         return cls_name;
     }
+
+    std::vector<std::string> cpp_proto_wrapper_struct_namespace_els(const google::protobuf::Descriptor* message_type) {
+        std::vector<std::string> namespace_els;
+        // TODO: Case conversion of packages
+        boost::split(namespace_els, message_type->file()->package(), boost::is_any_of("."));
+        return namespace_els;
+    }
+
+
+    std::string cpp_proto_wrapper_struct_name(const google::protobuf::Descriptor* message_type) {
+        std::string name("RB");
+        name += message_type->name();
+        return name;
+    }
 }
