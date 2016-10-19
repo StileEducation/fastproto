@@ -25,6 +25,14 @@ describe 'Generated code' do
         it 'starts with default values' do
             expect(::Fastproto::Test::TestMessageOne.new.id).to eql(0)
         end
+
+        it 'has reference semantics with strings' do
+            m = ::Fastproto::Test::TestMessageTwo.new
+            m.str_field = "foo bar"
+            s = m.str_field
+            s << " baz"
+            expect(m.str_field).to eql("foo bar baz")
+        end
     end
 
     describe 'validate!' do
@@ -133,13 +141,13 @@ describe 'Generated code' do
         describe 'an int32 field' do
             it 'deserializes properly' do
                 m = ::Fastproto::Test::TestMessageOne.new
-                m.parse(StringIO.new("\x08\x80\x20".force_encoding(Encoding::ASCII_8BIT)))
+                m.parse("\x08\x80\x20".force_encoding(Encoding::ASCII_8BIT))
                 expect(m.id).to eql(4096)
             end
 
             it 'Deserializes optional fields' do
                 m = ::Fastproto::Test::TestMessageOne.new
-                m.parse(StringIO.new("\x08\x80\x20\x10\x03".force_encoding(Encoding::ASCII_8BIT)))
+                m.parse("\x08\x80\x20\x10\x03".force_encoding(Encoding::ASCII_8BIT))
                 expect(m.id).to eql(4096)
                 expect(m.field_64).to eql(3)
             end
@@ -148,7 +156,7 @@ describe 'Generated code' do
         describe 'a double field' do
             it 'deserializes properly' do
                 m = ::Fastproto::Test::TestMessageTwo.new
-                m.parse(StringIO.new("\x19\x7B\x14\xAE\x47\xE1\x00\xB0\x40".force_encoding(Encoding::ASCII_8BIT)))
+                m.parse("\x19\x7B\x14\xAE\x47\xE1\x00\xB0\x40".force_encoding(Encoding::ASCII_8BIT))
                 expect(m.double_field).to eql(4096.88)
             end
         end
@@ -156,7 +164,7 @@ describe 'Generated code' do
         describe 'a bool field' do
             it 'deserializes properly' do
                 m = ::Fastproto::Test::TestMessageThree.new
-                m.parse(StringIO.new("\x08\x01".force_encoding(Encoding::ASCII_8BIT)))
+                m.parse("\x08\x01".force_encoding(Encoding::ASCII_8BIT))
                 expect(m.flag).to eql(true)
             end
         end
@@ -164,19 +172,19 @@ describe 'Generated code' do
         describe 'a string field' do
             it 'parses properly' do
                 m = ::Fastproto::Test::TestMessageTwo.new
-                m.parse(StringIO.new("\x22\x07\x66\x6F\x6F\x20\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT)))
+                m.parse("\x22\x07\x66\x6F\x6F\x20\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT))
                 expect(m.str_field).to eql("foo bar")
             end
 
             it 'serializes properly when it contains nulls' do
                 m = ::Fastproto::Test::TestMessageTwo.new
-                m.parse(StringIO.new("\x22\x07\x66\x6F\x6F\x00\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT)))
+                m.parse("\x22\x07\x66\x6F\x6F\x00\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT))
                 expect(m.str_field).to eql("foo\x00bar")
             end
 
             it 'works with bytes too' do
                 m = ::Fastproto::Test::TestMessageTwo.new
-                m.parse(StringIO.new("\x2A\x07\x66\x6F\x6F\x20\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT)))
+                m.parse("\x2A\x07\x66\x6F\x6F\x20\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT))
                 expect(m.byte_field).to eql("foo bar")
             end
         end

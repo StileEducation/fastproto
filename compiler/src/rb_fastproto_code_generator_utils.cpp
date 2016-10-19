@@ -44,4 +44,12 @@ namespace rb_fastproto {
         auto cpp_proto_cls = message_type->name();
         return boost::str(boost::format("%s::%s") % cpp_proto_ns % cpp_proto_cls);
     }
+
+    std::string ruby_proto_class_name(const google::protobuf::Descriptor* message_type) {
+        std::string cls_name("::");
+        // TODO: Case conversion of packages
+        cls_name += boost::replace_all_copy(message_type->file()->package(), ".", "::");
+        cls_name += message_type->name();
+        return cls_name;
+    }
 }

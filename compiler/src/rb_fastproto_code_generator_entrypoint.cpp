@@ -101,7 +101,6 @@ namespace rb_fastproto_gen {
         fastproto_init_file->set_name("rb_fastproto_init.cpp");
         fastproto_init_file->set_content(R"EOS(
 // Generated code that calls all the entrypoints
-#include <cstdarg>
 #include "rb_fastproto_init.h"
 
 // @@protoc_insertion_point(init_file_header)
