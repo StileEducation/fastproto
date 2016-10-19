@@ -5,3 +5,6 @@ compiler/Makefile
 compiler/rb_fastproto_compiler
 compiler/runtime/*.res.c
 spec/compiled_protobufs
+benchmark/fastproto_compiled_protobufs
+benchmark/rubypb_compiled_protobufs
+

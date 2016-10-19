@@ -1,0 +1,10 @@
+syntax = "proto2";
+package fastproto.benchmark;
+
+message MessageWithRepeateds {
+    required int32 message_counter = 1;
+    repeated int64 some_big_ints = 2;
+    repeated double some_floats = 3;
+    repeated sint64 some_negative_ints = 4;
+    repeated string some_strings = 5;
+}
