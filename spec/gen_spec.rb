@@ -102,6 +102,28 @@ describe 'Generated code' do
         end
     end
 
+    describe 'has_field?' do
+        it 'starts out false' do
+            m = ::Fastproto::TestProtos::TestMessageTwo.new
+            expect(m.has_str_field?).to eql(false)
+        end
+
+        it 'can be set to true by setting the field' do
+            m = ::Fastproto::TestProtos::TestMessageTwo.new
+            m.str_field = "ohai"
+            expect(m.has_str_field?).to eql(true)
+        end
+
+        it 'can be set back to false by nulling the field' do
+            m = ::Fastproto::TestProtos::TestMessageTwo.new
+            m.str_field = "ohai"
+            expect(m.has_str_field?).to eql(true)
+            m.str_field = nil
+            expect(m.str_field).to eql("")
+            expect(m.has_str_field?).to eql(false)
+        end
+    end
+
     describe 'serialize_to_string' do
         describe 'an int32 field' do
             it 'serializes properly' do

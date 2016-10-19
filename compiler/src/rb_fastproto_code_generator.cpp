@@ -179,7 +179,7 @@ namespace rb_fastproto {
 
             // Optional fields need has_? too
             if (field->is_optional()) {
-                printer.Print("VALUE has_$field_name$(VALUE self);\n", "field_name", field->name());
+                printer.Print("static VALUE has_$field_name$(VALUE self);\n", "field_name", field->name());
             }
             printer.Print("\n");
         }
@@ -342,6 +342,12 @@ namespace rb_fastproto {
                 "rb_define_method(rb_cls, \"$field_name$=\", reinterpret_cast<VALUE(*)(...)>(&set_$field_name$), 1);\n",
                 "field_name", field->name()
             );
+            if (field->is_optional()) {
+                printer.Print(
+                    "rb_define_method(rb_cls, \"has_$field_name$?\", reinterpret_cast<VALUE(*)(...)>(&has_$field_name$), 0);\n",
+                    "field_name", field->name()
+                );
+            }
         }
 
         printer.Outdent(); printer.Outdent();
