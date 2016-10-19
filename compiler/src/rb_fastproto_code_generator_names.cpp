@@ -1,6 +1,7 @@
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
+#include <boost/regex.hpp>
 #include <iostream>
 #include "rb_fastproto_code_generator.h"
 
@@ -47,16 +48,23 @@ namespace rb_fastproto {
 
     std::string ruby_proto_class_name(const google::protobuf::Descriptor* message_type) {
         std::string cls_name("::");
-        // TODO: Case conversion of packages
-        cls_name += boost::replace_all_copy(message_type->file()->package(), ".", "::");
+        auto namespace_bits = rubyised_namespace_els(message_type->file());
+        for (auto el : rubyised_namespace_els(message_type->file())) {
+            cls_name += (el + "::");
+        }
         cls_name += message_type->name();
         return cls_name;
     }
 
-    std::vector<std::string> cpp_proto_wrapper_struct_namespace_els(const google::protobuf::Descriptor* message_type) {
+    std::vector<std::string> rubyised_namespace_els(const google::protobuf::FileDescriptor* file) {
         std::vector<std::string> namespace_els;
         // TODO: Case conversion of packages
-        boost::split(namespace_els, message_type->file()->package(), boost::is_any_of("."));
+        boost::split(namespace_els, file->package(), boost::is_any_of("."));
+        for (auto&& el : namespace_els) {
+            el = boost::regex_replace(el, boost::regex("(?:^|_)(.)"), [](const boost::smatch &match){
+                return boost::to_upper_copy(match.str(1));
+            });
+        }
         return namespace_els;
     }
 

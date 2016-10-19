@@ -1,6 +1,7 @@
 #include <google/protobuf/io/zero_copy_stream.h>
 #include <google/protobuf/compiler/plugin.pb.h>
 #include <boost/scoped_ptr.hpp>
+#include <boost/algorithm/string.hpp>
 #include <iostream>
 #include "rb_fastproto_code_generator.h"
 
@@ -36,8 +37,8 @@ namespace rb_fastproto {
             "header", header_path_for_proto(file)
         );
         entrypoint_insertion_printer.Print(
-            "rb_fastproto_gen::_Init_$init_method$();\n",
-            "init_method", header_name_as_identifier(file)
+            "rb_fastproto_gen::$package_ns$::_Init();\n",
+            "package_ns", boost::join(rubyised_namespace_els(file), "::")
         );
     }
 

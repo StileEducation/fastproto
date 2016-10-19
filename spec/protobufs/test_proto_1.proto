@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-package Fastproto.Test;
+package fastproto.test_protos;
 
 message TestMessageOne {
     required int32 id = 1;

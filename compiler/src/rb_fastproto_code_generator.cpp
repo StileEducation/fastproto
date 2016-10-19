@@ -52,14 +52,15 @@ namespace rb_fastproto {
             "\n",
             "header_file_name", header_name_as_identifier(file)
         );
-        printer.Indent(); printer.Indent();
 
-        // Define a method that the overall-init will call to define the ruby classes & modules contained
-        // in this file.
-        printer.Print(
-            "extern \"C\" void _Init_$header_file_name$();\n",
-            "header_file_name", header_name_as_identifier(file)
-        );
+        // Add namespaces for the generated proto package
+        auto namespace_parts = rubyised_namespace_els(file);
+        for (auto&& ns : namespace_parts) {
+            printer.Print("namespace $ns$ {\n", "ns", ns);
+        }
+        printer.Print("\n");
+
+        printer.Indent(); printer.Indent();
 
         // We need to export our classes in the header file, so that other messages can
         // serialize this one as a part of their operation.
@@ -68,8 +69,17 @@ namespace rb_fastproto {
             write_header_message_struct_definition(file, message_type, printer);
         }
 
+        // Define a method that the overall-init will call to define the ruby classes & modules contained
+        // in this file.
+        printer.Print(
+            "void _Init();\n"
+        );
+
 
         printer.Outdent(); printer.Outdent();
+        for (auto&& ns : namespace_parts) {
+            printer.Print("}\n");
+        }
         printer.Print(
             "}\n"
             "#endif\n"
@@ -200,6 +210,13 @@ namespace rb_fastproto {
             "pb_header_name", cpp_proto_header_path_for_proto(file)
         );
 
+        // Add namespaces for the generated proto package
+        auto namespace_parts = rubyised_namespace_els(file);
+        for (auto&& ns : namespace_parts) {
+            printer.Print("namespace $ns$ {\n", "ns", ns);
+        }
+        printer.Print("\n");
+
         printer.Indent(); printer.Indent();
 
         printer.Print(
@@ -215,6 +232,10 @@ namespace rb_fastproto {
 
         // Write an Init function that gets called from the ruby gem init.
         write_cpp_message_module_init(file, class_names, printer);
+
+        for (auto&& ns : namespace_parts) {
+            printer.Print("}\n");
+        }
 
         // Close off the rb_fastproto_gen namespace
         printer.Outdent(); printer.Outdent();
@@ -926,14 +947,12 @@ namespace rb_fastproto {
         google::protobuf::io::Printer &printer
     ) const {
         printer.Print(
-            "extern \"C\" void _Init_$header_name$() {\n",
-            "header_name", header_name_as_identifier(file)
+            "void _Init() {\n"
         );
         printer.Indent(); printer.Indent();
 
         // We need to define a ruby module for the package to store message classes in.
-        std::vector<std::string> package_elements;
-        boost::algorithm::split(package_elements, file->package(), boost::is_any_of("."));
+        auto package_elements = rubyised_namespace_els(file);
         // The first scope is special because we need to use rb_define_module, not rb_define_module_under
         printer.Print(
             "package_rb_module = rb_define_module(\"$package_el$\");\n",

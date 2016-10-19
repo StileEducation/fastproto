@@ -27,6 +27,6 @@ ADD_EXECUTABLE (rb_fastproto_compiler
     src/rb_fastproto_code_generator_entrypoint.cpp
 )
 TARGET_LINK_LIBRARIES (rb_fastproto_compiler
-    protoc protobuf boost_filesystem boost_system
+    protoc protobuf boost_filesystem boost_system boost_regex
 )
 set(CMAKE_CXX_FLAGS " --std=c++14")
