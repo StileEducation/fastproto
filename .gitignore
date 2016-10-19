@@ -3,4 +3,5 @@ compiler/cmake_install.cmake
 compiler/CMakeCache.txt
 compiler/Makefile
 compiler/rb_fastproto_compiler
+compiler/runtime/*.res.c
 spec/compiled_protobufs
