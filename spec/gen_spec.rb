@@ -40,6 +40,53 @@ describe 'Generated code' do
             m.numbers << 787 << 44
             expect(m.numbers).to eql([5, 10, 15, 787, 44])
         end
+
+        describe 'their constructors' do
+            it 'can set simple fields' do
+                m = ::Fastproto::TestProtos::TestMessageTwo.new(
+                    :field_64 => 9999,
+                    'str_field' => 'awww yeahhh!',
+                )
+
+                expect(m.has_field_64?).to eql(true)
+                expect(m.field_64).to eql(9999)
+                expect(m.has_str_field?).to eql(true)
+                expect(m.str_field).to eql('awww yeahhh!')
+                expect(m.has_double_field?).to eql(false)
+                expect(m.has_byte_field?).to eql(false)
+            end
+
+            it 'can set complex fields' do
+                m = ::Fastproto::NestedTests::ParentTestMessage.new(
+                    id: 23,
+                    box: ::Fastproto::NestedTests::ChildTestMessage.new(box_me: 'ohai!')
+                )
+
+                expect(m.id).to eql(23)
+                expect(m.has_box?).to eql(true)
+                expect(m.box.box_me).to eql('ohai!')
+            end
+
+            it 'works with hash subclasses too' do
+                class SpecialHash < Hash; end
+                m = ::Fastproto::NestedTests::ParentTestMessage.new(SpecialHash[[
+                    [:id, 23],
+                    [:box, ::Fastproto::NestedTests::ChildTestMessage.new(box_me: 'ohai!')]
+                ]])
+
+                expect(m.id).to eql(23)
+                expect(m.has_box?).to eql(true)
+                expect(m.box.box_me).to eql('ohai!')
+            end
+
+            it 'does not segfault if you do something silly' do
+                expect {
+                    ::Fastproto::TestProtos::TestMessageTwo.new(
+                        Object.new => 'look - it is not actually a string, but an object!'
+                    )
+                }.to raise_error(TypeError)
+            end
+        end
     end
 
     describe 'validate!' do

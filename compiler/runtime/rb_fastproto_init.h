@@ -1,6 +1,7 @@
 #include <ruby/ruby.h>
 #include <ruby/encoding.h>
 #include <functional>
+#include <string>
 
 #ifndef __RB_FASTPROTO_INIT_H
 #define __RB_FASTPROTO_INIT_H
@@ -59,6 +60,7 @@ namespace rb_fastproto_gen {
         rb_enc_associate_index(rstr, rb_enc_find_index("UTF-8"));
         return rstr;
     }
+
 }
 
 #endif
