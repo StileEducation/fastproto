@@ -294,7 +294,7 @@ describe 'Generated code' do
                 expect(m.str_field).to eql("foo bar")
             end
 
-            it 'serializes properly when it contains nulls' do
+            it 'parses properly when it contains nulls' do
                 m = ::Fastproto::TestProtos::TestMessageTwo.new
                 m.parse("\x22\x07\x66\x6F\x6F\x00\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT))
                 expect(m.str_field).to eql("foo\x00bar")
@@ -304,6 +304,16 @@ describe 'Generated code' do
                 m = ::Fastproto::TestProtos::TestMessageTwo.new
                 m.parse("\x2A\x07\x66\x6F\x6F\x20\x62\x61\x72".force_encoding(Encoding::ASCII_8BIT))
                 expect(m.byte_field).to eql("foo bar")
+            end
+        end
+
+        describe 'a nested message' do
+            it 'parses properly' do
+                m = ::Fastproto::NestedTests::ParentTestMessage.new
+                m.parse("\x08\x01\x12\x12\x0A\x10\x62\x6F\x78\x69\x6E\x67\x20\x6B\x61\x6E\x67\x61\x72\x6F\x6F\x21".force_encoding(Encoding::ASCII_8BIT))
+                expect(m.id).to eql(1)
+                expect(m.has_box?).to eql(true)
+                expect(m.box.box_me).to eql("boxing kangaroo!")
             end
         end
     end

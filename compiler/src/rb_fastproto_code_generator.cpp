@@ -121,6 +121,7 @@ namespace rb_fastproto {
             "// methods whose implementations will control ruby lifecycle stuff\n"
             "static void initialize_class();\n"
             "static VALUE alloc(VALUE self);\n"
+            "static VALUE alloc();\n"
             "static VALUE initialize(VALUE self);\n"
             "static void free(char* memory);\n"
             "static void mark(char* memory);\n"
@@ -373,6 +374,9 @@ namespace rb_fastproto {
             "    std::memset(memory, 0, sizeof($class_name$));\n"
             "    return Data_Wrap_Struct(self, &mark, &free, memory);\n"
             "}\n"
+            "VALUE $class_name$::alloc() {\n"
+            "    return alloc(rb_path2class(\"$rb_class_name$\"));\n"
+            "}\n"
             "\n"
             "VALUE $class_name$::initialize(VALUE self) {\n"
             "    // Use placement new to create the object\n"
@@ -393,7 +397,8 @@ namespace rb_fastproto {
             "void $class_name$::mark(char* memory) {\n"
             "    auto cpp_this = reinterpret_cast<$class_name$*>(memory);\n"
             "\n",
-            "class_name", class_name
+            "class_name", class_name,
+            "rb_class_name", ruby_proto_class_name(message_type)
         );
 
         // Mark each field
@@ -854,11 +859,40 @@ namespace rb_fastproto {
                     single_op = "field_$field_name$ = rb_str_new(cpp_proto.$field_name$().data(), cpp_proto.$field_name$().length());\n";
                     repeated_op = "rb_ary_push(field_$field_name$, rb_str_new(array_el.data(), array_el.length()));\n";
                     break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_MESSAGE:
+                case google::protobuf::FieldDescriptor::Type::TYPE_GROUP:
+                    // Recurse to serialize the message
+                    single_op = (
+                        "{\n"
+                        "    this->field_$field_name$ = $nested_message_type$::alloc();\n"
+                        "    rb_obj_call_init(this->field_$field_name$, 0, nullptr);\n"
+                        "    $nested_message_type$* cpp_nested;\n"
+                        "    Data_Get_Struct(this->field_$field_name$, $nested_message_type$, cpp_nested);\n"
+                        "    cpp_nested->from_proto_obj(cpp_proto.$field_name$());\n"
+                        "}\n"
+                    );
+                    repeated_op = (
+                        "{\n"
+                        "    VALUE new_obj = $nested_message_type$::alloc();\n"
+                        "    rb_obj_call_init(this->field_$field_name$, 0, nullptr);\n"
+                        "    rb_ary_push(field_$field_name$, new_obj);\n"
+                        "    $nested_message_type$* cpp_nested;\n"
+                        "    Data_Get_Struct(new_obj, $nested_message_type$, cpp_nested);\n"
+                        "    cpp_nested->from_proto_obj(array_el.$field_name$());\n"
+                        "}\n"
+                    );
+                    break;
                 default:
                     break;
             }
 
-            printer.Print((field->is_repeated() ? repeated_op : single_op).c_str(), "field_name", field->name());
+            printer.Print(
+                (field->is_repeated() ? repeated_op : single_op).c_str(),
+                "field_name", field->name(),
+                "rb_message_class_name", field->message_type() != nullptr ? ruby_proto_class_name(field->message_type()) : "",
+                "nested_message_type", field->message_type() != nullptr ? cpp_proto_wrapper_struct_name(field->message_type()) : ""
+            );
+
             if (field->is_optional()) {
                 printer.Print("has_field_$field_name$ = true;\n", "field_name", field->name());
             }
