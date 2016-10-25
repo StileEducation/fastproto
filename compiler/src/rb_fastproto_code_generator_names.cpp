@@ -47,12 +47,20 @@ namespace rb_fastproto {
     }
 
     std::string ruby_proto_class_name(const google::protobuf::Descriptor* message_type) {
-        std::string cls_name("::");
-        auto namespace_bits = rubyised_namespace_els(message_type->file());
+        std::string cls_name("");
         for (auto el : rubyised_namespace_els(message_type->file())) {
             cls_name += (el + "::");
         }
         cls_name += message_type->name();
+        return cls_name;
+    }
+
+    std::string cpp_proto_wrapper_struct_name(const google::protobuf::Descriptor* message_type) {
+        std::string cls_name("");
+        for (auto el : rubyised_namespace_els(message_type->file())) {
+            cls_name += (el + "::");
+        }
+        cls_name += (std::string("RB") + message_type->name());
         return cls_name;
     }
 
@@ -69,7 +77,7 @@ namespace rb_fastproto {
     }
 
 
-    std::string cpp_proto_wrapper_struct_name(const google::protobuf::Descriptor* message_type) {
+    std::string cpp_proto_wrapper_struct_name_no_ns(const google::protobuf::Descriptor* message_type) {
         std::string name("RB");
         name += message_type->name();
         return name;

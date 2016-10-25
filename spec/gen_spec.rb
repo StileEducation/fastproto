@@ -84,6 +84,48 @@ describe 'Generated code' do
                 expect { m.validate! }.to raise_error(RangeError)
             end
         end
+
+        describe 'a message field' do
+            it 'works with an appropriately typed message' do
+                m = ::Fastproto::NestedTests::ParentTestMessage.new
+                m.id = 1
+                m.box = ::Fastproto::NestedTests::ChildTestMessage.new
+                m.box.box_me = "ohai"
+                expect { m.validate! }.to_not raise_error
+            end
+
+            it 'does not work with some random object' do
+                m = ::Fastproto::NestedTests::ParentTestMessage.new
+                m.id = 1
+                m.box = { 'foo_me' => 'bar' }
+                expect { m.validate! }.to raise_error(TypeError)
+            end
+
+            it 'does not work with a different protobuf type' do
+                m = ::Fastproto::NestedTests::ParentTestMessage.new
+                m.id = 1
+                m.box = ::Fastproto::NestedTests::ParentTestMessage.new
+                m.box.id = 2
+                expect { m.validate! }.to raise_error(TypeError)
+            end
+
+            it 'does not work with subclasses' do
+                class SC < ::Fastproto::NestedTests::ChildTestMessage; end
+                m = ::Fastproto::NestedTests::ParentTestMessage.new
+                m.id = 1
+                m.box = SC.new
+                m.box.box_me = "ohai"
+                expect { m.validate! }.to raise_error(TypeError)
+            end
+
+            it 'the default value is frozen' do
+                m = ::Fastproto::NestedTests::ParentTestMessage.new
+                expect(m.box.frozen?).to eql(true)
+                expect {
+                    m.box.box_me = "boxing kangaroo!"
+                }.to raise_error(RuntimeError)
+            end
+        end
     end
 
     describe 'defaults' do
@@ -198,6 +240,17 @@ describe 'Generated code' do
             it 'serializes empty properly' do
                 m = ::Fastproto::TestProtos::TestMessageFour.new
                 expect(m.serialize_to_string).to eql("")
+            end
+        end
+
+        describe 'a nested message' do
+            it 'serializes properly' do
+                m = ::Fastproto::NestedTests::ParentTestMessage.new
+                m.id = 1
+                m.box = ::Fastproto::NestedTests::ChildTestMessage.new
+                m.box.box_me = "boxing kangaroo!"
+                expect(m.serialize_to_string).to eql("\x08\x01\x12\x12\x0A\x10\x62\x6F\x78\x69\x6E\x67\x20\x6B\x61\x6E\x67\x61\x72\x6F\x6F\x21".force_encoding(Encoding::ASCII_8BIT))
+
             end
         end
     end

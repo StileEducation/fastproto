@@ -92,7 +92,7 @@ namespace rb_fastproto {
         const google::protobuf::Descriptor* message_type,
         google::protobuf::io::Printer &printer
     ) const {
-        auto class_name = cpp_proto_wrapper_struct_name(message_type);
+        auto class_name = cpp_proto_wrapper_struct_name_no_ns(message_type);
         printer.Print("struct $class_name$ {\n", "class_name", class_name);
         printer.Indent(); printer.Indent();
 
@@ -250,7 +250,7 @@ namespace rb_fastproto {
     ) const {
         // This bit is responsible for writing out the message struct.
 
-        auto class_name = cpp_proto_wrapper_struct_name(message_type);
+        auto class_name = cpp_proto_wrapper_struct_name_no_ns(message_type);
 
         // The instance constructor for a protobuf message
         write_cpp_message_struct_constructor(file, message_type, class_name, printer);
@@ -480,6 +480,7 @@ namespace rb_fastproto {
                             "        rb_path2class(\"$rb_message_class_name$\"),\n"
                             "        rb_intern(\"new\"), 0\n"
                             "    );\n"
+                            "    obj = rb_obj_freeze(obj);\n"
                             "    return obj;\n"
                             "} else {\n"
                             "    return Qnil;\n"
@@ -517,6 +518,13 @@ namespace rb_fastproto {
                 "class_name", class_name
             );
             printer.Indent(); printer.Indent();
+
+            printer.Print(
+                "if (RB_OBJ_FROZEN(self)) {\n"
+                "    rb_raise(rb_eRuntimeError, \"Message is frozen\");\n"
+                "    return Qnil;\n"
+                "}\n"
+            );
 
             // If nil was provided, interpret that as "unset"
             printer.Print("if (val == Qnil) {\n");
@@ -706,13 +714,38 @@ namespace rb_fastproto {
                 case google::protobuf::FieldDescriptor::Type::TYPE_MESSAGE:
                 case google::protobuf::FieldDescriptor::Type::TYPE_GROUP:
                     // Recurse to serialize the message
-                    // TODO: Needs to access the type of the dependant message.
+                    single_op = (
+                        "Check_Type(_self->field_$field_name$, T_DATA);\n"
+                        "if (CLASS_OF(_self->field_$field_name$) != rb_path2class(\"$rb_message_class_name$\")) {\n"
+                        "    rb_raise(rb_eTypeError, \"$field_name$ not a $rb_message_class_name$\");\n"
+                        "} else {\n"
+                        "    $nested_message_type$* cpp_nested;\n"
+                        "    Data_Get_Struct(_self->field_$field_name$, $nested_message_type$, cpp_nested);\n"
+                        "    cpp_nested->to_proto_obj(_cpp_proto->mutable_$field_name$());\n"
+                        "}\n"
+                    );
+                    repeated_op = (
+                        "Check_Type(*array_el, T_DATA);\n"
+                        "if (CLASS_OF(*array_el) != rb_path2class(\"$rb_message_class_name$\")) {\n"
+                        "    rb_raise(rb_eTypeError, \"$field_name$ not a $rb_message_class_name$\");\n"
+                        "} else {\n"
+                        "    $nested_message_type$* cpp_nested;\n"
+                        "    Data_Get_Struct(*array_el, $nested_message_type$, cpp_nested);\n"
+                        "    auto pb_el = _cpp_proto->add_$field_name$();\n"
+                        "    cpp_nested->to_proto_obj(pb_el);\n"
+                        "}\n"
+                    );
                     break;
                 default:
                     break;
             }
 
-            printer.Print((field->is_repeated() ? repeated_op : single_op).c_str(), "field_name", field->name());
+            printer.Print(
+                (field->is_repeated() ? repeated_op : single_op).c_str(),
+                "field_name", field->name(),
+                "rb_message_class_name", field->message_type() != nullptr ? ruby_proto_class_name(field->message_type()) : "",
+                "nested_message_type", field->message_type() != nullptr ? cpp_proto_wrapper_struct_name(field->message_type()) : ""
+            );
 
             printer.Outdent(); printer.Outdent();
             if (field->is_optional()) {

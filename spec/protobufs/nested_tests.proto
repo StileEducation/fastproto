@@ -1,0 +1,12 @@
+syntax = "proto2";
+
+package fastproto.nested_tests;
+
+message ParentTestMessage {
+    required int32 id = 1;
+    optional ChildTestMessage box = 2;
+}
+
+message ChildTestMessage {
+    required string box_me = 1;
+}
