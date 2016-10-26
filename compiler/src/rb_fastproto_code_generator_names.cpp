@@ -46,6 +46,10 @@ namespace rb_fastproto {
         return boost::str(boost::format("%s::%s") % cpp_proto_ns % cpp_proto_cls);
     }
 
+    std::string cpp_proto_descriptor_name(const google::protobuf::Descriptor* message_type) {
+        return boost::str(boost::format("%s_descriptor_") % cpp_proto_class_name(message_type));
+    }
+
     std::string ruby_proto_class_name(const google::protobuf::Descriptor* message_type) {
         std::string cls_name("");
         for (auto el : rubyised_namespace_els(message_type->file())) {

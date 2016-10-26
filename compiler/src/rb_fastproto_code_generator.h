@@ -91,6 +91,12 @@ namespace rb_fastproto {
             const std::string &class_name,
             google::protobuf::io::Printer &printer
         ) const;
+        void write_cpp_message_struct_dynamic_accessors(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
         void write_cpp_message_struct_allocators(
             const google::protobuf::FileDescriptor* file,
             const google::protobuf::Descriptor* message_type,
@@ -140,6 +146,7 @@ namespace rb_fastproto {
     std::string cpp_proto_header_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
     std::string cpp_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
     std::string cpp_proto_class_name(const google::protobuf::Descriptor* message_type);
+    std::string cpp_proto_descriptor_name(const google::protobuf::Descriptor* message_type);
     std::string ruby_proto_class_name(const google::protobuf::Descriptor* message_type);
     std::vector<std::string> rubyised_namespace_els(const google::protobuf::FileDescriptor* file);
     std::string cpp_proto_wrapper_struct_name(const google::protobuf::Descriptor* message_type);

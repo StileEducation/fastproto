@@ -132,6 +132,9 @@ namespace rb_fastproto {
             "static VALUE serialize_to_string(VALUE self);\n"
             "static VALUE serialize_to_string_with_gvl(VALUE self);\n"
             "static VALUE parse(VALUE self, VALUE buffer);\n"
+            "static VALUE value_for_tag(VALUE self, VALUE tag);\n"
+            "static VALUE set_value_for_tag(VALUE self, VALUE tag, VALUE val);\n"
+            "static VALUE has_value_for_tag(VALUE self, VALUE tag);\n"
             "\n"
             "VALUE to_proto_obj($cpp_proto_class$* cpp_proto);\n"
             "VALUE from_proto_obj(const $cpp_proto_class$& cpp_proto);\n",
@@ -181,15 +184,12 @@ namespace rb_fastproto {
             printer.Print(
                 "static VALUE get_$field_name$(VALUE self);\n"
                 "static VALUE set_$field_name$(VALUE self, VALUE val);\n"
+                "static VALUE has_$field_name$(VALUE self);\n"
                 "static VALUE default_factory_$field_name$(bool constructor);\n"
                 "\n",
                 "field_name", field->name()
             );
 
-            // Optional fields need has_? too
-            if (field->is_optional()) {
-                printer.Print("static VALUE has_$field_name$(VALUE self);\n", "field_name", field->name());
-            }
             printer.Print("\n");
         }
     }
@@ -268,6 +268,8 @@ namespace rb_fastproto {
         write_cpp_message_struct_default_factories(file, message_type, class_name, printer);
         // Static accessors for each field, so ruby can call them
         write_cpp_message_struct_accessors(file, message_type, class_name, printer);
+        // Dynamic value_for_tag methods
+        write_cpp_message_struct_dynamic_accessors(file, message_type, class_name, printer);
         // to and from proto object conversion
         write_cpp_message_struct_to_proto_obj(file, message_type, class_name, printer);
         write_cpp_message_struct_from_proto_obj(file, message_type, class_name, printer);
@@ -338,6 +340,9 @@ namespace rb_fastproto {
             "rb_define_method(rb_cls, \"serialize_to_string\", RUBY_METHOD_FUNC(&serialize_to_string), 0);\n"
             "rb_define_method(rb_cls, \"serialize_to_string_with_gvl\", RUBY_METHOD_FUNC(&serialize_to_string_with_gvl), 0);\n"
             "rb_define_method(rb_cls, \"parse\", RUBY_METHOD_FUNC(&parse), 1);\n"
+            "rb_define_method(rb_cls, \"value_for_tag\", RUBY_METHOD_FUNC(&value_for_tag), 1);\n"
+            "rb_define_method(rb_cls, \"set_value_for_tag\", RUBY_METHOD_FUNC(&set_value_for_tag), 2);\n"
+            "rb_define_method(rb_cls, \"value_for_tag?\", RUBY_METHOD_FUNC(&has_value_for_tag), 1);\n"
             "\n",
             "ruby_class_name", message_type->name(),
             "class_name", class_name
@@ -348,16 +353,11 @@ namespace rb_fastproto {
             auto field = message_type->field(i);
 
             printer.Print(
-                "rb_define_method(rb_cls, \"$field_name$\", reinterpret_cast<VALUE(*)(...)>(&get_$field_name$), 0);\n"
-                "rb_define_method(rb_cls, \"$field_name$=\", reinterpret_cast<VALUE(*)(...)>(&set_$field_name$), 1);\n",
+                "rb_define_method(rb_cls, \"$field_name$\", RUBY_METHOD_FUNC(&get_$field_name$), 0);\n"
+                "rb_define_method(rb_cls, \"$field_name$=\", RUBY_METHOD_FUNC(&set_$field_name$), 1);\n"
+                "rb_define_method(rb_cls, \"has_$field_name$?\", RUBY_METHOD_FUNC(&has_$field_name$), 0);\n",
                 "field_name", field->name()
             );
-            if (field->is_optional()) {
-                printer.Print(
-                    "rb_define_method(rb_cls, \"has_$field_name$?\", reinterpret_cast<VALUE(*)(...)>(&has_$field_name$), 0);\n",
-                    "field_name", field->name()
-                );
-            }
         }
 
         printer.Outdent(); printer.Outdent();
@@ -620,18 +620,70 @@ namespace rb_fastproto {
             printer.Print("}\n");
 
             // Maybe a has_? as well
+            printer.Print(
+                "VALUE $class_name$::has_$field_name$(VALUE self) {\n",
+                "field_name", field->name(),
+                "class_name", class_name
+            );
+            printer.Indent(); printer.Indent();
+
             if (field->is_optional()) {
                 printer.Print(
-                    "VALUE $class_name$::has_$field_name$(VALUE self) {\n"
-                    "    $class_name$* cpp_self;\n"
-                    "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
-                    "    return cpp_self->has_field_$field_name$ ? Qtrue : Qfalse; \n"
-                    "}\n\n",
+                    "$class_name$* cpp_self;\n"
+                    "Data_Get_Struct(self, $class_name$, cpp_self);\n"
+                    "return cpp_self->has_field_$field_name$ ? Qtrue : Qfalse; \n",
                     "field_name", field->name(),
                     "class_name", class_name
                 );
+            } else {
+                printer.Print("return Qtrue;\n");
             }
+
+            printer.Outdent(); printer.Outdent();
+            printer.Print("}\n");
         }
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_message_struct_dynamic_accessors(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print(
+            "VALUE $class_name$::value_for_tag(VALUE self, VALUE tag) {\n"
+            "    Check_Type(tag, T_FIXNUM);\n"
+            "    auto field_descriptor = $cpp_proto_type$::descriptor()->FindFieldByNumber(NUM2INT(tag));\n"
+            "    if (field_descriptor == nullptr) {\n"
+            "        rb_raise(rb_eKeyError, \"Tag not found\");\n"
+            "        return Qnil;\n"
+            "    }\n"
+            "    auto method = rb_intern(field_descriptor->name().c_str());\n"
+            "    return rb_funcall(self, method, 0);\n"
+            "}\n"
+            "VALUE $class_name$::set_value_for_tag(VALUE self, VALUE tag, VALUE val) {\n"
+            "    Check_Type(tag, T_FIXNUM);\n"
+            "    auto field_descriptor = $cpp_proto_type$::descriptor()->FindFieldByNumber(NUM2INT(tag));\n"
+            "    if (field_descriptor == nullptr) {\n"
+            "        rb_raise(rb_eKeyError, \"Tag not found\");\n"
+            "        return Qnil;\n"
+            "    }\n"
+            "    auto method = rb_intern(std::string(field_descriptor->name() + \"=\").c_str());\n"
+            "    return rb_funcall(self, method, 1, val);\n"
+            "}\n"
+            "VALUE $class_name$::has_value_for_tag(VALUE self, VALUE tag) {\n"
+            "    Check_Type(tag, T_FIXNUM);\n"
+            "    auto field_descriptor = $cpp_proto_type$::descriptor()->FindFieldByNumber(NUM2INT(tag));\n"
+            "    if (field_descriptor == nullptr) {\n"
+            "        rb_raise(rb_eKeyError, \"Tag not found\");\n"
+            "        return Qnil;\n"
+            "    }\n"
+            "    auto method = rb_intern((std::string(\"has_\") + field_descriptor->name() + \"?\").c_str());\n"
+            "    return rb_funcall(self, method, 0);\n"
+            "}\n",
+            "class_name", class_name,
+            "cpp_proto_type", cpp_proto_class_name(message_type)
+        );
     }
 
     void RBFastProtoCodeGenerator::write_cpp_message_struct_to_proto_obj(
