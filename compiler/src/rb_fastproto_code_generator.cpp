@@ -104,6 +104,7 @@ namespace rb_fastproto {
             "// (thereby invoking its constructor)\n"
             "bool have_initialized;\n"
             "static VALUE rb_cls;\n"
+            "bool is_default_value;\n"
         );
         // Write fields for the message field
         write_header_message_struct_fields(file, message_type, class_name, printer);
@@ -112,7 +113,7 @@ namespace rb_fastproto {
         printer.Print(
             "\n\n"
             "// The default constructor will make a default message.\n"
-            "$class_name$();\n"
+            "$class_name$(VALUE rb_self);\n"
             "~$class_name$() = default;\n"
             "\n",
             "class_name", class_name
@@ -137,6 +138,7 @@ namespace rb_fastproto {
             "static VALUE has_value_for_tag(VALUE self, VALUE tag);\n"
             "static VALUE get_nested(int argc, VALUE* argv, VALUE self);\n"
             "static VALUE get_nested_bang(int argc, VALUE* argv, VALUE self);\n"
+            "static VALUE notify_default_changed(VALUE self, VALUE sender, VALUE notify_tag);\n"
             "\n"
             "VALUE to_proto_obj($cpp_proto_class$* cpp_proto);\n"
             "VALUE from_proto_obj(const $cpp_proto_class$& cpp_proto);\n",
@@ -192,7 +194,7 @@ namespace rb_fastproto {
                 "static VALUE get_$field_name$(VALUE self);\n"
                 "static VALUE set_$field_name$(VALUE self, VALUE val);\n"
                 "static VALUE has_$field_name$(VALUE self);\n"
-                "static VALUE default_factory_$field_name$(bool constructor);\n"
+                "static VALUE default_factory_$field_name$(VALUE self, bool constructor);\n"
                 "\n",
                 "field_name", cpp_field_name(field)
             );
@@ -309,7 +311,7 @@ namespace rb_fastproto {
     ) const {
         // Object constructor; called in ruby initialize method.
         printer.Print(
-            "$class_name$::$constructor_name$() : have_initialized(true) { \n",
+            "$class_name$::$constructor_name$(VALUE rb_self) : have_initialized(true), is_default_value(true) { \n",
             "class_name", class_name,
             "constructor_name", cpp_proto_wrapper_struct_name_no_ns(message_type)
         );
@@ -320,7 +322,10 @@ namespace rb_fastproto {
             auto field = message_type->field(j);
 
             // Set the default value appropriately
-            printer.Print("field_$field_name$ = default_factory_$field_name$(true);\n", "field_name", cpp_field_name(field));
+            printer.Print(
+                "field_$field_name$ = default_factory_$field_name$(rb_self, true);\n",
+                "field_name", cpp_field_name(field)
+            );
 
             // If the field is optional, we need to set the has or not status of it
             if (field->is_optional()) {
@@ -358,6 +363,7 @@ namespace rb_fastproto {
             "rb_define_method(rb_cls, \"value_for_tag?\", RUBY_METHOD_FUNC(&has_value_for_tag), 1);\n"
             "rb_define_method(rb_cls, \"get\", RUBY_METHOD_FUNC(&get_nested), -1);\n"
             "rb_define_method(rb_cls, \"get!\", RUBY_METHOD_FUNC(&get_nested_bang), -1);\n"
+            "rb_define_method(rb_cls, \"notify_default_changed\", RUBY_METHOD_FUNC(&notify_default_changed), 2);\n"
             "\n",
             "ruby_namespace", message_type->containing_type() == nullptr ?
                 "package_rb_module" :
@@ -412,7 +418,7 @@ namespace rb_fastproto {
             "    // Use placement new to create the object\n"
             "    void* memory;\n"
             "    Data_Get_Struct(self, void*, memory);\n"
-            "    new(memory) $class_name$();\n"
+            "    new(memory) $class_name$(self);\n"
             "    // If we got passed a hash, set attributes with it.\n"
             "    VALUE attrs = Qnil;\n"
             "    rb_scan_args(argc, argv, \"01\", &attrs);\n"
@@ -490,7 +496,7 @@ namespace rb_fastproto {
             auto field = message_type->field(j);
 
             printer.Print(
-                "VALUE $class_name$::default_factory_$field_name$(bool constructor) {\n",
+                "VALUE $class_name$::default_factory_$field_name$(VALUE self, bool constructor) {\n",
                 "field_name", cpp_field_name(field),
                 "class_name", class_name
             );
@@ -544,14 +550,19 @@ namespace rb_fastproto {
                             "        rb_path2class(\"$rb_message_class_name$\"),\n"
                             "        rb_intern(\"new\"), 0\n"
                             "    );\n"
-                            "    obj = rb_obj_freeze(obj);\n"
+                            "    // obj = rb_obj_freeze(obj);\n"
+                            "    // Set the parent_for_notify to be us - we will find out when one of its subfields\n"
+                            "    // changes, so we can update is_set for optional fields.\n"
+                            "    rb_ivar_set(obj, rb_intern(\"@parent_for_notify\"), self);\n"
+                            "    rb_ivar_set(obj, rb_intern(\"@tag_for_notify\"), INT2NUM($field_number$));"
                             "    return obj;\n"
                             "} else {\n"
                             "    return Qnil;\n"
                             "}\n",
                             "is_required", field->is_required() ? "true" : "false",
-                            "rb_message_class_name", ruby_proto_class_name(field->message_type())
-
+                            "rb_message_class_name", ruby_proto_class_name(field->message_type()),
+                            "field_name", cpp_field_name(field),
+                            "field_number", std::to_string(field->number())
                         );
                     default:
                         break;
@@ -594,7 +605,7 @@ namespace rb_fastproto {
             printer.Print("if (val == Qnil) {\n");
             printer.Indent(); printer.Indent();
 
-            printer.Print("cpp_self->field_$field_name$ = default_factory_$field_name$(false);\n", "field_name", cpp_field_name(field));
+            printer.Print("cpp_self->field_$field_name$ = default_factory_$field_name$(self, false);\n", "field_name", cpp_field_name(field));
             if (field->is_optional()) {
                 printer.Print("cpp_self->has_field_$field_name$ = false;\n", "field_name", cpp_field_name(field));
             }
@@ -612,6 +623,19 @@ namespace rb_fastproto {
                 printer.Print("cpp_self->has_field_$field_name$ = true;\n", "field_name", cpp_field_name(field));
             }
 
+            printer.Print(
+                "if (cpp_self->is_default_value) {\n"
+                "    cpp_self->is_default_value = false;\n"
+                "    if (rb_ivar_get(self, rb_intern(\"@parent_for_notify\"))) {\n"
+                "        VALUE parent_for_notify = rb_ivar_get(self, rb_intern(\"@parent_for_notify\"));\n"
+                "        if (parent_for_notify != Qnil) {\n"
+                "            VALUE notify_tag = rb_ivar_get(self, rb_intern(\"@tag_for_notify\"));\n"
+                "            rb_funcall(parent_for_notify, rb_intern(\"notify_default_changed\"), 2, self, notify_tag);\n"
+                "            rb_ivar_set(self, rb_intern(\"@parent_for_notify\"), Qnil);\n"
+                "        }\n"
+                "    }\n"
+                "}\n"
+            );
 
             printer.Outdent(); printer.Outdent();
             printer.Print("}\n");
@@ -636,7 +660,7 @@ namespace rb_fastproto {
             if (field->message_type()) {
                 printer.Print(
                     "if (cpp_self->field_$field_name$ == Qnil) {\n"
-                    "    cpp_self->field_$field_name$ = default_factory_$field_name$(false);\n"
+                    "    cpp_self->field_$field_name$ = default_factory_$field_name$(self, false);\n"
                     "}\n",
                     "field_name", cpp_field_name(field)
                 );
@@ -712,15 +736,33 @@ namespace rb_fastproto {
             "    VALUE field_sym = Qnil;\n"
             "    VALUE rest = Qnil;\n"
             "    rb_scan_args(argc, argv, \"1*\", &field_sym, &rest);\n"
-            "    if (TYPE(field_sym) != T_STRING && TYPE(field_sym) != T_SYMBOL) {\n"
+            "    ID field_sym_id;\n"
+            "    ID has_field_sym_id;\n"
+            "    if (TYPE(field_sym) == T_STRING) {\n"
+            "        field_sym_id = rb_intern_str(field_sym);\n"
+            "        std::string has_f(\"has_\");\n"
+            "        has_f += std::string(RSTRING_PTR(field_sym), RSTRING_LEN(field_sym));\n"
+            "        has_f += \"?\";\n"
+            "        has_field_sym_id = rb_intern(has_f.c_str());\n"
+            "    } else if (TYPE(field_sym) == T_SYMBOL) {\n"
+            "        field_sym_id = SYM2ID(field_sym);\n"
+            "        VALUE field_sym_str = rb_funcall(field_sym, rb_intern(\"to_s\"), 0);\n"
+            "        std::string has_f(\"has_\");\n"
+            "        has_f += std::string(RSTRING_PTR(field_sym_str), RSTRING_LEN(field_sym_str));\n"
+            "        has_f += \"?\";\n"
+            "        has_field_sym_id = rb_intern(has_f.c_str());\n"
+            "    } else {\n"
             "        rb_raise(rb_eTypeError, \"Not a symbol or string\");\n"
             "        return Qnil;\n"
             "    }\n"
-            "    VALUE first_obj = rb_funcall(self, rb_intern_str(field_sym), 0);\n"
+            "    VALUE first_obj = Qnil;\n"
+            "    if (rb_funcall(self, has_field_sym_id, 0) == Qtrue) {\n"
+            "        first_obj = rb_funcall(self, field_sym_id, 0);\n"
+            "    }\n"
             "    if (first_obj == Qnil) {\n"
             "        return Qnil;\n"
             "    } else if (argc >= 2) {\n"
-            "        return rb_funcall2(first_obj, rb_intern(\"get_nested\"), argc - 1, argv + 1);\n"
+            "        return rb_funcall2(first_obj, rb_intern(\"get\"), argc - 1, argv + 1);\n"
             "    } else {\n"
             "        return first_obj;\n"
             "    }"
@@ -733,6 +775,20 @@ namespace rb_fastproto {
             "    } else {\n"
             "        return obj;\n"
             "    }\n"
+            "}\n"
+            "VALUE $class_name$::notify_default_changed(VALUE self, VALUE sender, VALUE notify_tag) {\n"
+            "    int field_num = NUM2INT(notify_tag);\n"
+            "    // Meaningless for required fields;\n"
+            "    if (!$cpp_proto_type$::descriptor()->FindFieldByNumber(field_num)->is_optional()) {\n"
+            "        return Qnil;\n"
+            "    }\n"
+            "    // Just do the slow get_value_for_tag thing :(\n"
+            "    VALUE current_field_value = value_for_tag(self, notify_tag);\n"
+            "    if (current_field_value != sender) {\n"
+            "        return Qnil;\n"
+            "    }\n"
+            "    set_value_for_tag(self, notify_tag, current_field_value);\n"
+            "    return Qnil;\n"
             "}\n",
             "class_name", class_name,
             "cpp_proto_type", cpp_proto_class_name(message_type)
