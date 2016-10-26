@@ -151,6 +151,7 @@ namespace rb_fastproto {
     std::vector<std::string> rubyised_namespace_els(const google::protobuf::FileDescriptor* file);
     std::string cpp_proto_wrapper_struct_name(const google::protobuf::Descriptor* message_type);
     std::string cpp_proto_wrapper_struct_name_no_ns(const google::protobuf::Descriptor* message_type);
+    std::string cpp_field_name(const google::protobuf::FieldDescriptor* field);
     void add_entrypoint_files(google::protobuf::compiler::CodeGeneratorResponse &response);
 }
 

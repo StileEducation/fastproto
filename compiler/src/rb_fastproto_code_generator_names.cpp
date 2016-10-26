@@ -3,6 +3,7 @@
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
 #include <iostream>
+#include <stack>
 #include "rb_fastproto_code_generator.h"
 
 // Some utils for working with filenames et al
@@ -42,8 +43,21 @@ namespace rb_fastproto {
 
     std::string cpp_proto_class_name(const google::protobuf::Descriptor* message_type) {
         auto cpp_proto_ns = boost::replace_all_copy(message_type->file()->package(), ".", "::");
-        auto cpp_proto_cls = message_type->name();
-        return boost::str(boost::format("%s::%s") % cpp_proto_ns % cpp_proto_cls);
+        // Use a std::stack to push the parents up the chain, then append them to the namespace, most senior first
+        std::stack<std::string> message_type_chain;
+        auto cur_type = message_type;
+        do {
+            message_type_chain.push(cur_type->name());
+        } while ( (cur_type = cur_type->containing_type()) != nullptr );
+        cpp_proto_ns += "::";
+        while (!message_type_chain.empty()) {
+            cpp_proto_ns += message_type_chain.top();
+            message_type_chain.pop();
+            if (!message_type_chain.empty()) {
+                cpp_proto_ns += "_";
+            }
+        }
+        return cpp_proto_ns;
     }
 
     std::string cpp_proto_descriptor_name(const google::protobuf::Descriptor* message_type) {
@@ -51,26 +65,38 @@ namespace rb_fastproto {
     }
 
     std::string ruby_proto_class_name(const google::protobuf::Descriptor* message_type) {
-        std::string cls_name("");
-        for (auto el : rubyised_namespace_els(message_type->file())) {
-            cls_name += (el + "::");
+        auto cpp_proto_ns = boost::join(rubyised_namespace_els(message_type->file()), "::");
+        // Use a std::stack to push the parents up the chain, then append them to the namespace, most senior first
+        std::stack<std::string> message_type_chain;
+        auto cur_type = message_type;
+        do {
+            message_type_chain.push(cur_type->name());
+        } while ( (cur_type = cur_type->containing_type()) != nullptr );
+        while (!message_type_chain.empty()) {
+            cpp_proto_ns += (std::string("::") + message_type_chain.top());
+            message_type_chain.pop();
         }
-        cls_name += message_type->name();
-        return cls_name;
+        return cpp_proto_ns;
     }
 
     std::string cpp_proto_wrapper_struct_name(const google::protobuf::Descriptor* message_type) {
-        std::string cls_name("");
-        for (auto el : rubyised_namespace_els(message_type->file())) {
-            cls_name += (el + "::");
+        std::string cpp_proto_ns("rb_fastproto_gen::");
+        cpp_proto_ns += boost::join(rubyised_namespace_els(message_type->file()), "::");
+        // Use a std::stack to push the parents up the chain, then append them to the namespace, most senior first
+        std::stack<std::string> message_type_chain;
+        auto cur_type = message_type;
+        do {
+            message_type_chain.push(cur_type->name());
+        } while ( (cur_type = cur_type->containing_type()) != nullptr );
+        while (!message_type_chain.empty()) {
+            cpp_proto_ns += (std::string("::RB") + message_type_chain.top());
+            message_type_chain.pop();
         }
-        cls_name += (std::string("RB") + message_type->name());
-        return cls_name;
+        return cpp_proto_ns;
     }
 
     std::vector<std::string> rubyised_namespace_els(const google::protobuf::FileDescriptor* file) {
         std::vector<std::string> namespace_els;
-        // TODO: Case conversion of packages
         boost::split(namespace_els, file->package(), boost::is_any_of("."));
         for (auto&& el : namespace_els) {
             el = boost::regex_replace(el, boost::regex("(?:^|_)(.)"), [](const boost::smatch &match){
@@ -85,5 +111,29 @@ namespace rb_fastproto {
         std::string name("RB");
         name += message_type->name();
         return name;
+    }
+
+    // Rip this from cpp_helpers.cc to transform PB names to C++ field names
+    std::set<std::string> cpp_keywords = {
+        "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor",
+        "bool", "break", "case", "catch", "char", "class", "compl", "const",
+        "constexpr", "const_cast", "continue", "decltype", "default", "delete", "do",
+        "double", "dynamic_cast", "else", "enum", "explicit", "export", "extern",
+        "false", "float", "for", "friend", "goto", "if", "inline", "int", "long",
+        "mutable", "namespace", "new", "noexcept", "not", "not_eq", "NULL",
+        "operator", "or", "or_eq", "private", "protected", "public", "register",
+        "reinterpret_cast", "return", "short", "signed", "sizeof", "static",
+        "static_assert", "static_cast", "struct", "switch", "template", "this",
+        "thread_local", "throw", "true", "try", "typedef", "typeid", "typename",
+        "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t",
+        "while", "xor", "xor_eq"
+    };
+    std::string cpp_field_name(const google::protobuf::FieldDescriptor* field) {
+        std::string result = field->name();
+        boost::to_lower(result);
+        if (cpp_keywords.count(result) > 0) {
+            result += "_";
+        }
+        return result;
     }
 }

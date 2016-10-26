@@ -146,6 +146,11 @@ namespace rb_fastproto {
         // various methods defined for each protobuf field, like getters & setters
         write_header_message_struct_accessors(file, message_type, class_name, printer);
 
+        // Define any submessages
+        for (int i = 0; i < message_type->nested_type_count(); i++ ) {
+            write_header_message_struct_definition(file, message_type->nested_type(i), printer);
+        }
+
         printer.Outdent(); printer.Outdent();
         printer.Print("};\n\n");
     }
@@ -161,9 +166,9 @@ namespace rb_fastproto {
         for (int j = 0; j < message_type->field_count(); j++) {
             auto field = message_type->field(j);
 
-            printer.Print("VALUE field_$field_name$;\n", "field_name", field->name());
+            printer.Print("VALUE field_$field_name$;\n", "field_name", cpp_field_name(field));
             if (field->is_optional()) {
-                printer.Print("bool has_field_$field_name$;\n", "field_name", field->name());
+                printer.Print("bool has_field_$field_name$;\n", "field_name", cpp_field_name(field));
             }
         }
 
@@ -189,7 +194,7 @@ namespace rb_fastproto {
                 "static VALUE has_$field_name$(VALUE self);\n"
                 "static VALUE default_factory_$field_name$(bool constructor);\n"
                 "\n",
-                "field_name", field->name()
+                "field_name", cpp_field_name(field)
             );
 
             printer.Print("\n");
@@ -260,7 +265,7 @@ namespace rb_fastproto {
     ) const {
         // This bit is responsible for writing out the message struct.
 
-        auto class_name = cpp_proto_wrapper_struct_name_no_ns(message_type);
+        auto class_name = cpp_proto_wrapper_struct_name(message_type);
 
         // The instance constructor for a protobuf message
         write_cpp_message_struct_constructor(file, message_type, class_name, printer);
@@ -288,6 +293,11 @@ namespace rb_fastproto {
         // For some silly reason we need to initialized its static members at translation-unit scope?
         printer.Print("VALUE $class_name$::rb_cls = Qnil;\n", "class_name", class_name);
 
+        // Write the implementation for all submessages to
+        for (int i = 0; i < message_type->nested_type_count(); i++ ) {
+            write_cpp_message_struct(file, message_type->nested_type(i), printer);
+        }
+
         return class_name;
     }
 
@@ -299,8 +309,9 @@ namespace rb_fastproto {
     ) const {
         // Object constructor; called in ruby initialize method.
         printer.Print(
-            "$class_name$::$class_name$() : have_initialized(true) { \n",
-            "class_name", class_name
+            "$class_name$::$constructor_name$() : have_initialized(true) { \n",
+            "class_name", class_name,
+            "constructor_name", cpp_proto_wrapper_struct_name_no_ns(message_type)
         );
 
         // Initialize each field in the constructor.
@@ -309,11 +320,11 @@ namespace rb_fastproto {
             auto field = message_type->field(j);
 
             // Set the default value appropriately
-            printer.Print("field_$field_name$ = default_factory_$field_name$(true);\n", "field_name", field->name());
+            printer.Print("field_$field_name$ = default_factory_$field_name$(true);\n", "field_name", cpp_field_name(field));
 
             // If the field is optional, we need to set the has or not status of it
             if (field->is_optional()) {
-                printer.Print("has_field_$field_name$ = false;\n", "field_name", field->name());
+                printer.Print("has_field_$field_name$ = false;\n", "field_name", cpp_field_name(field));
             }
         }
         printer.Outdent(); printer.Outdent();
@@ -335,7 +346,7 @@ namespace rb_fastproto {
         printer.Indent(); printer.Indent();
 
         printer.Print(
-            "rb_cls = rb_define_class_under(package_rb_module, \"$ruby_class_name$\", cls_fastproto_message);\n"
+            "rb_cls = rb_define_class_under($ruby_namespace$, \"$ruby_class_name$\", cls_fastproto_message);\n"
             "rb_define_alloc_func(rb_cls, &alloc);\n"
             "rb_define_method(rb_cls, \"initialize\", RUBY_METHOD_FUNC(&initialize), -1);\n"
             "rb_define_method(rb_cls, \"validate!\", RUBY_METHOD_FUNC(&validate), 0);\n"
@@ -348,6 +359,9 @@ namespace rb_fastproto {
             "rb_define_method(rb_cls, \"get\", RUBY_METHOD_FUNC(&get_nested), -1);\n"
             "rb_define_method(rb_cls, \"get!\", RUBY_METHOD_FUNC(&get_nested_bang), -1);\n"
             "\n",
+            "ruby_namespace", message_type->containing_type() == nullptr ?
+                "package_rb_module" :
+                cpp_proto_wrapper_struct_name(message_type->containing_type()) + "::rb_cls",
             "ruby_class_name", message_type->name(),
             "class_name", class_name
         );
@@ -360,9 +374,15 @@ namespace rb_fastproto {
                 "rb_define_method(rb_cls, \"$field_name$\", RUBY_METHOD_FUNC(&get_$field_name$), 0);\n"
                 "rb_define_method(rb_cls, \"$field_name$=\", RUBY_METHOD_FUNC(&set_$field_name$), 1);\n"
                 "rb_define_method(rb_cls, \"has_$field_name$?\", RUBY_METHOD_FUNC(&has_$field_name$), 0);\n",
-                "field_name", field->name()
+                "field_name", cpp_field_name(field)
             );
         }
+
+        // Initialize any submessages too
+        for (int i = 0; i < message_type->nested_type_count(); i++ ) {
+            printer.Print("$subtype$::initialize_class();\n", "subtype", cpp_proto_wrapper_struct_name(message_type->nested_type(i)));
+        }
+
 
         printer.Outdent(); printer.Outdent();
         printer.Print("}\n\n");
@@ -427,7 +447,7 @@ namespace rb_fastproto {
             "void $class_name$::free(char* memory) {\n"
             "    auto obj = reinterpret_cast<$class_name$*>(memory);\n"
             "    if (obj->have_initialized) {\n"
-            "        obj->~$class_name$();\n"
+            "        obj->~$destructor_name$();\n"
             "    }\n"
             "    ruby_xfree(memory);\n"
             "}\n"
@@ -436,6 +456,7 @@ namespace rb_fastproto {
             "    auto cpp_this = reinterpret_cast<$class_name$*>(memory);\n"
             "\n",
             "class_name", class_name,
+            "destructor_name", cpp_proto_wrapper_struct_name_no_ns(message_type),
             "rb_class_name", ruby_proto_class_name(message_type)
         );
 
@@ -445,7 +466,7 @@ namespace rb_fastproto {
         for (int j = 0; j < message_type->field_count(); j++) {
             auto field = message_type->field(j);
 
-            printer.Print("rb_gc_mark(cpp_this->field_$field_name$);\n", "field_name", field->name());
+            printer.Print("rb_gc_mark(cpp_this->field_$field_name$);\n", "field_name", cpp_field_name(field));
         }
 
         printer.Outdent(); printer.Outdent();
@@ -470,7 +491,7 @@ namespace rb_fastproto {
 
             printer.Print(
                 "VALUE $class_name$::default_factory_$field_name$(bool constructor) {\n",
-                "field_name", field->name(),
+                "field_name", cpp_field_name(field),
                 "class_name", class_name
             );
             printer.Indent(); printer.Indent();
@@ -557,7 +578,7 @@ namespace rb_fastproto {
                 "    $class_name$* cpp_self;\n"
                 "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
                 "\n",
-                "field_name", field->name(),
+                "field_name", cpp_field_name(field),
                 "class_name", class_name
             );
             printer.Indent(); printer.Indent();
@@ -573,9 +594,9 @@ namespace rb_fastproto {
             printer.Print("if (val == Qnil) {\n");
             printer.Indent(); printer.Indent();
 
-            printer.Print("cpp_self->field_$field_name$ = default_factory_$field_name$(false);\n", "field_name", field->name());
+            printer.Print("cpp_self->field_$field_name$ = default_factory_$field_name$(false);\n", "field_name", cpp_field_name(field));
             if (field->is_optional()) {
-                printer.Print("cpp_self->has_field_$field_name$ = false;\n", "field_name", field->name());
+                printer.Print("cpp_self->has_field_$field_name$ = false;\n", "field_name", cpp_field_name(field));
             }
 
             printer.Outdent(); printer.Outdent();
@@ -585,10 +606,10 @@ namespace rb_fastproto {
             printer.Print("} else {\n");
             printer.Indent(); printer.Indent();
 
-            printer.Print("cpp_self->field_$field_name$ = val;\n", "field_name", field->name());
+            printer.Print("cpp_self->field_$field_name$ = val;\n", "field_name", cpp_field_name(field));
 
             if (field->is_optional()) {
-                printer.Print("cpp_self->has_field_$field_name$ = true;\n", "field_name", field->name());
+                printer.Print("cpp_self->has_field_$field_name$ = true;\n", "field_name", cpp_field_name(field));
             }
 
 
@@ -606,7 +627,7 @@ namespace rb_fastproto {
                 "    $class_name$* cpp_self;\n"
                 "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
                 "\n",
-                "field_name", field->name(),
+                "field_name", cpp_field_name(field),
                 "class_name", class_name
             );
             printer.Indent(); printer.Indent();
@@ -617,10 +638,10 @@ namespace rb_fastproto {
                     "if (cpp_self->field_$field_name$ == Qnil) {\n"
                     "    cpp_self->field_$field_name$ = default_factory_$field_name$(false);\n"
                     "}\n",
-                    "field_name", field->name()
+                    "field_name", cpp_field_name(field)
                 );
             }
-            printer.Print("return cpp_self->field_$field_name$;\n", "field_name", field->name());
+            printer.Print("return cpp_self->field_$field_name$;\n", "field_name", cpp_field_name(field));
 
             printer.Outdent(); printer.Outdent();
             printer.Print("}\n");
@@ -628,7 +649,7 @@ namespace rb_fastproto {
             // Maybe a has_? as well
             printer.Print(
                 "VALUE $class_name$::has_$field_name$(VALUE self) {\n",
-                "field_name", field->name(),
+                "field_name", cpp_field_name(field),
                 "class_name", class_name
             );
             printer.Indent(); printer.Indent();
@@ -638,7 +659,7 @@ namespace rb_fastproto {
                     "$class_name$* cpp_self;\n"
                     "Data_Get_Struct(self, $class_name$, cpp_self);\n"
                     "return cpp_self->has_field_$field_name$ ? Qtrue : Qfalse; \n",
-                    "field_name", field->name(),
+                    "field_name", cpp_field_name(field),
                     "class_name", class_name
                 );
             } else {
@@ -766,11 +787,11 @@ namespace rb_fastproto {
                     "    array_el < rb_array_const_ptr(_self->field_$field_name$) + rb_array_len(_self->field_$field_name$);\n"
                     "    array_el++\n"
                     ") {\n",
-                    "field_name", field->name()
+                    "field_name", cpp_field_name(field)
                 );
             } else if (field->is_optional()) {
                 // Do nothing if the field is not set
-                printer.Print("if (_self->has_field_$field_name$) {\n", "field_name", field->name());
+                printer.Print("if (_self->has_field_$field_name$) {\n", "field_name", cpp_field_name(field));
             } else {
                 printer.Print("if (true) {\n");
             }
@@ -863,7 +884,7 @@ namespace rb_fastproto {
 
             printer.Print(
                 (field->is_repeated() ? repeated_op : single_op).c_str(),
-                "field_name", field->name(),
+                "field_name", cpp_field_name(field),
                 "rb_message_class_name", field->message_type() != nullptr ? ruby_proto_class_name(field->message_type()) : "",
                 "nested_message_type", field->message_type() != nullptr ? cpp_proto_wrapper_struct_name(field->message_type()) : ""
             );
@@ -871,7 +892,7 @@ namespace rb_fastproto {
             printer.Outdent(); printer.Outdent();
             if (field->is_optional()) {
                 printer.Print("} else {\n"); // close of if (required | set)
-                printer.Print("    _cpp_proto->clear_$field_name$();\n", "field_name", field->name());
+                printer.Print("    _cpp_proto->clear_$field_name$();\n", "field_name", cpp_field_name(field));
             }
             printer.Print("}\n");
         }
@@ -928,11 +949,11 @@ namespace rb_fastproto {
                     "// Initialize the array to the right size.\n"
                     "field_$field_name$ = rb_ary_new_capa(cpp_proto.$field_name$_size());\n"
                     "for (auto&& array_el : cpp_proto.$field_name$()) {\n",
-                    "field_name", field->name()
+                    "field_name", cpp_field_name(field)
                 );
             } else if (field->is_optional()) {
                 // Do nothing if the field is not set
-                printer.Print("if (cpp_proto.has_$field_name$()) {\n", "field_name", field->name());
+                printer.Print("if (cpp_proto.has_$field_name$()) {\n", "field_name", cpp_field_name(field));
             } else {
                 printer.Print("if (true) {\n");
             }
@@ -998,7 +1019,7 @@ namespace rb_fastproto {
                         "    rb_ary_push(field_$field_name$, new_obj);\n"
                         "    $nested_message_type$* cpp_nested;\n"
                         "    Data_Get_Struct(new_obj, $nested_message_type$, cpp_nested);\n"
-                        "    cpp_nested->from_proto_obj(array_el.$field_name$());\n"
+                        "    cpp_nested->from_proto_obj(array_el);\n"
                         "}\n"
                     );
                     break;
@@ -1008,20 +1029,20 @@ namespace rb_fastproto {
 
             printer.Print(
                 (field->is_repeated() ? repeated_op : single_op).c_str(),
-                "field_name", field->name(),
+                "field_name", cpp_field_name(field),
                 "rb_message_class_name", field->message_type() != nullptr ? ruby_proto_class_name(field->message_type()) : "",
                 "nested_message_type", field->message_type() != nullptr ? cpp_proto_wrapper_struct_name(field->message_type()) : ""
             );
 
             if (field->is_optional()) {
-                printer.Print("has_field_$field_name$ = true;\n", "field_name", field->name());
+                printer.Print("has_field_$field_name$ = true;\n", "field_name", cpp_field_name(field));
             }
 
 
             printer.Outdent(); printer.Outdent();
             if (field->is_optional()) {
                 printer.Print("} else {\n"); // close of if (required | set)
-                printer.Print("   has_field_$field_name$ = false;\n", "field_name", field->name());
+                printer.Print("   has_field_$field_name$ = false;\n", "field_name", cpp_field_name(field));
             }
             printer.Print("}\n");
         }
