@@ -135,6 +135,8 @@ namespace rb_fastproto {
             "static VALUE value_for_tag(VALUE self, VALUE tag);\n"
             "static VALUE set_value_for_tag(VALUE self, VALUE tag, VALUE val);\n"
             "static VALUE has_value_for_tag(VALUE self, VALUE tag);\n"
+            "static VALUE get_nested(int argc, VALUE* argv, VALUE self);\n"
+            "static VALUE get_nested_bang(int argc, VALUE* argv, VALUE self);\n"
             "\n"
             "VALUE to_proto_obj($cpp_proto_class$* cpp_proto);\n"
             "VALUE from_proto_obj(const $cpp_proto_class$& cpp_proto);\n",
@@ -343,6 +345,8 @@ namespace rb_fastproto {
             "rb_define_method(rb_cls, \"value_for_tag\", RUBY_METHOD_FUNC(&value_for_tag), 1);\n"
             "rb_define_method(rb_cls, \"set_value_for_tag\", RUBY_METHOD_FUNC(&set_value_for_tag), 2);\n"
             "rb_define_method(rb_cls, \"value_for_tag?\", RUBY_METHOD_FUNC(&has_value_for_tag), 1);\n"
+            "rb_define_method(rb_cls, \"get\", RUBY_METHOD_FUNC(&get_nested), -1);\n"
+            "rb_define_method(rb_cls, \"get!\", RUBY_METHOD_FUNC(&get_nested_bang), -1);\n"
             "\n",
             "ruby_class_name", message_type->name(),
             "class_name", class_name
@@ -680,6 +684,32 @@ namespace rb_fastproto {
             "    }\n"
             "    auto method = rb_intern((std::string(\"has_\") + field_descriptor->name() + \"?\").c_str());\n"
             "    return rb_funcall(self, method, 0);\n"
+            "}\n"
+            "VALUE $class_name$::get_nested(int argc, VALUE* argv, VALUE self) {\n"
+            "    VALUE field_sym = Qnil;\n"
+            "    VALUE rest = Qnil;\n"
+            "    rb_scan_args(argc, argv, \"1*\", &field_sym, &rest);\n"
+            "    if (TYPE(field_sym) != T_STRING && TYPE(field_sym) != T_SYMBOL) {\n"
+            "        rb_raise(rb_eTypeError, \"Not a symbol or string\");\n"
+            "        return Qnil;\n"
+            "    }\n"
+            "    VALUE first_obj = rb_funcall(self, rb_intern_str(field_sym), 0);\n"
+            "    if (first_obj == Qnil) {\n"
+            "        return Qnil;\n"
+            "    } else if (argc >= 2) {\n"
+            "        return rb_funcall2(first_obj, rb_intern(\"get_nested\"), argc - 1, argv + 1);\n"
+            "    } else {\n"
+            "        return first_obj;\n"
+            "    }"
+            "}\n"
+            "VALUE $class_name$::get_nested_bang(int argc, VALUE* argv, VALUE self) {\n"
+            "    VALUE obj = get_nested(argc, argv, self);\n"
+            "    if (obj == Qnil) {\n"
+            "        rb_raise(rb_eArgError, \"Field is not set\");\n"
+            "        return Qnil;\n"
+            "    } else {\n"
+            "        return obj;\n"
+            "    }\n"
             "}\n",
             "class_name", class_name,
             "cpp_proto_type", cpp_proto_class_name(message_type)
