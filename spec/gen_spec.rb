@@ -364,4 +364,16 @@ describe 'Generated code' do
             end
         end
     end
+
+    describe 'unknown fields' do
+        it 'reserializes them' do
+            m = ::Fastproto::NestedTests::ParentTestMessage.new
+            # This has a bonus ChildTestMessage as tag 3 - not in the protobuf!
+            m.parse("\x08\x01\x1A\x10\x0A\x0E\x68\x69\x64\x64\x65\x6E\x20\x6D\x65\x73\x73\x61\x67\x65".force_encoding(Encoding::ASCII_8BIT))
+            expect(m.id).to eql(1)
+
+            m.id = 2
+            expect(m.serialize_to_string).to eql("\x08\x02\x1A\x10\x0A\x0E\x68\x69\x64\x64\x65\x6E\x20\x6D\x65\x73\x73\x61\x67\x65".force_encoding(Encoding::ASCII_8BIT))
+        end
+    end
 end

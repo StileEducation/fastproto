@@ -39,6 +39,8 @@ namespace rb_fastproto {
 
         printer.Print(
             "#include <ruby/ruby.h>\n"
+            "#include <vector>\n"
+            "#include <utility>\n"
             "#include \"$pb_header_name$\"\n"
             "\n",
             "pb_header_name", cpp_proto_header_path_for_proto(file)
@@ -159,6 +161,11 @@ namespace rb_fastproto {
                 printer.Print("bool has_field_$field_name$;\n", "field_name", field->name());
             }
         }
+
+        // Add storage for unknown fields
+        // Note that this is not exposed to ruby, except if you deserialize unknown fields,
+        // they will be serialized again.
+        printer.Print("google::protobuf::UnknownFieldSet unknown_fields;\n");
     }
 
     void RBFastProtoCodeGenerator::write_header_message_struct_accessors(
@@ -785,6 +792,9 @@ namespace rb_fastproto {
             printer.Print("}\n");
         }
 
+        // Now set any unknown fields.
+        printer.Print("_cpp_proto->GetReflection()->MutableUnknownFields(_cpp_proto)->MergeFrom(_self->unknown_fields);\n");
+
         printer.Print("return Qnil;\n");
         printer.Outdent(); printer.Outdent();
 
@@ -930,6 +940,9 @@ namespace rb_fastproto {
             }
             printer.Print("}\n");
         }
+
+        // Now set any unknown fields.
+        printer.Print("this->unknown_fields.MergeFrom(cpp_proto.GetReflection()->GetUnknownFields(cpp_proto));\n");
 
         printer.Print("return Qnil;\n");
         printer.Outdent(); printer.Outdent();
