@@ -130,6 +130,7 @@ namespace rb_fastproto {
             "static void mark(char* memory);\n"
             "\n"
             "static VALUE validate(VALUE self);\n"
+            "static VALUE instance_variables(VALUE self);\n"
             "static VALUE serialize_to_string(VALUE self);\n"
             "static VALUE serialize_to_string_with_gvl(VALUE self);\n"
             "static VALUE parse(VALUE self, VALUE buffer);\n"
@@ -291,6 +292,8 @@ namespace rb_fastproto {
         write_cpp_message_struct_serializer(file, message_type, class_name, printer);
         // Desserialization methods
         write_cpp_message_struct_parser(file, message_type, class_name, printer);
+        // instance_variables introspection method
+        write_cpp_message_struct_instance_variables(file, message_type, class_name, printer);
 
         // For some silly reason we need to initialized its static members at translation-unit scope?
         printer.Print("VALUE $class_name$::rb_cls = Qnil;\n", "class_name", class_name);
@@ -355,6 +358,7 @@ namespace rb_fastproto {
             "rb_define_alloc_func(rb_cls, &alloc);\n"
             "rb_define_method(rb_cls, \"initialize\", RUBY_METHOD_FUNC(&initialize), -1);\n"
             "rb_define_method(rb_cls, \"validate!\", RUBY_METHOD_FUNC(&validate), 0);\n"
+            "rb_define_method(rb_cls, \"instance_variables\", RUBY_METHOD_FUNC(&instance_variables), 0);\n"
             "rb_define_method(rb_cls, \"serialize_to_string\", RUBY_METHOD_FUNC(&serialize_to_string), 0);\n"
             "rb_define_method(rb_cls, \"serialize_to_string_with_gvl\", RUBY_METHOD_FUNC(&serialize_to_string_with_gvl), 0);\n"
             "rb_define_method(rb_cls, \"parse\", RUBY_METHOD_FUNC(&parse), 1);\n"
@@ -1264,6 +1268,33 @@ namespace rb_fastproto {
             "}\n\n",
             "class_name", class_name,
             "cpp_proto_class", cpp_proto_class_name(message_type)
+        );
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_message_struct_instance_variables(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print(
+            "VALUE $class_name$::instance_variables(VALUE self) {\n"
+            "    VALUE names = rb_ary_new();\n",
+            "class_name", class_name
+        );
+
+        for (int j = 0; j < message_type->field_count(); j++) {
+            auto field = message_type->field(j);
+
+            printer.Print(
+                "    rb_ary_push(names, rb_str_new2(\"$field_name$\"));\n",
+                "field_name", cpp_field_name(field)
+            );
+        }
+
+        printer.Print(
+            "    return names;\n"
+            "}\n"
         );
     }
 
