@@ -3,8 +3,7 @@ require 'rspec/core/rake_task'
 
 task :build_compiler do
     cd 'compiler' do
-        sh 'cmake', '.'
-        sh 'make', 'clean', 'rb_fastproto_compiler'
+        sh 'make', 'rb_fastproto_compiler'
     end
 end
 

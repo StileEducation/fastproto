@@ -1,9 +1,7 @@
-compiler/CMakeFiles
-compiler/cmake_install.cmake
-compiler/CMakeCache.txt
-compiler/Makefile
 compiler/rb_fastproto_compiler
 compiler/runtime/*.res.c
+compiler/runtime/*.res.o
+compiler/src/*.o
 spec/compiled_protobufs
 benchmark/fastproto_compiled_protobufs
 benchmark/rubypb_compiled_protobufs
