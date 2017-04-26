@@ -1,6 +1,8 @@
 CMAKE_MINIMUM_REQUIRED (VERSION 3.0)
 PROJECT (rb_fastproto_compiler)
 
+SET(CMAKE_CXX_FLAGS " --std=c++14")
+
 # Compile runtime files using xxd -i, taken from
 # http://stackoverflow.com/questions/14422507/cmake-run-xxd-as-custom-command
 SET(RUNTIME_RESOURCES
@@ -19,6 +21,12 @@ FOREACH(INPUT_FILE ${RUNTIME_RESOURCES})
     LIST(APPEND COMPILED_RUNTIME_RESOURCES ${OUTPUT_FILE})
 ENDFOREACH()
 
+FIND_PACKAGE(Protobuf REQUIRED)
+INCLUDE_DIRECTORIES(${Protobuf_INCLUDE_DIRS})
+
+FIND_PACKAGE(Boost REQUIRED COMPONENTS filesystem system regex)
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
+
 ADD_EXECUTABLE (rb_fastproto_compiler
     ${COMPILED_RUNTIME_RESOURCES}
     src/protoc_gen_rb_fastproto.cpp
@@ -26,7 +34,4 @@ ADD_EXECUTABLE (rb_fastproto_compiler
     src/rb_fastproto_code_generator_names.cpp
     src/rb_fastproto_code_generator_entrypoint.cpp
 )
-TARGET_LINK_LIBRARIES (rb_fastproto_compiler
-    protoc protobuf boost_filesystem boost_system boost_regex
-)
-set(CMAKE_CXX_FLAGS " --std=c++14")
+TARGET_LINK_LIBRARIES (rb_fastproto_compiler ${Protobuf_PROTOC_LIBRARY} ${Protobuf_LIBRARIES} ${Boost_LIBRARIES})
