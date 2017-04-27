@@ -31,14 +31,24 @@ namespace rb_fastproto {
             const google::protobuf::FileDescriptor *file,
             google::protobuf::io::Printer &printer
         ) const;
+
         void write_cpp(
             const google::protobuf::FileDescriptor *file,
             google::protobuf::io::Printer &printer
         ) const;
+
         void write_entrypoint(
             const google::protobuf::FileDescriptor* file,
             google::protobuf::compiler::OutputDirectory *output_directory
         ) const;
+
+        void write_cpp_module_init(
+            const google::protobuf::FileDescriptor* file,
+            const std::vector<std::string> &class_names,
+            google::protobuf::io::Printer &printer
+        ) const;
+
+        // message code
 
         void write_header_message_struct_definition(
             const google::protobuf::FileDescriptor* file,
@@ -65,7 +75,6 @@ namespace rb_fastproto {
             const google::protobuf::Descriptor* message_type,
             google::protobuf::io::Printer &printer
         ) const;
-
 
         void write_cpp_message_struct_constructor(
             const google::protobuf::FileDescriptor* file,
@@ -133,12 +142,96 @@ namespace rb_fastproto {
             const std::string &class_name,
             google::protobuf::io::Printer &printer
         ) const;
-        void write_cpp_message_module_init(
+
+        // service code
+
+        void write_header_service_struct_definition(
             const google::protobuf::FileDescriptor* file,
-            const std::vector<std::string> &class_names,
+            const google::protobuf::ServiceDescriptor* service,
             google::protobuf::io::Printer &printer
         ) const;
 
+        std::string write_cpp_service_struct(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::ServiceDescriptor* service,
+            google::protobuf::io::Printer &printer
+        ) const;
+
+        void write_cpp_service_struct_constructor(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::ServiceDescriptor* service,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_service_struct_static_initializer(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::ServiceDescriptor* service,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_service_struct_allocators(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::ServiceDescriptor* service,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_service_struct_name(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::ServiceDescriptor* service,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_service_struct_rpcs(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::ServiceDescriptor* service,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+
+        // method code
+
+        void write_header_method_struct_definition(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::MethodDescriptor* method,
+            google::protobuf::io::Printer &printer
+        ) const;
+
+        std::string write_cpp_method_struct(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::MethodDescriptor* method,
+            google::protobuf::io::Printer &printer
+        ) const;
+
+        void write_cpp_method_struct_constructor(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::MethodDescriptor* method,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_method_struct_static_initializer(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::MethodDescriptor* method,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_method_struct_allocators(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::MethodDescriptor* method,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_method_struct_name(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::MethodDescriptor* method,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_method_struct_classes(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::MethodDescriptor* method,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
     };
 
     std::string header_name_as_identifier(const google::protobuf::FileDescriptor* proto_file);
@@ -147,10 +240,16 @@ namespace rb_fastproto {
     std::string cpp_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
     std::string cpp_proto_class_name(const google::protobuf::Descriptor* message_type);
     std::string cpp_proto_descriptor_name(const google::protobuf::Descriptor* message_type);
-    std::string ruby_proto_class_name(const google::protobuf::Descriptor* message_type);
+    std::string ruby_proto_message_class_name(const google::protobuf::Descriptor* message_type);
+    std::string ruby_proto_service_class_name(const google::protobuf::ServiceDescriptor* service);
+    std::string ruby_proto_method_class_name(const google::protobuf::MethodDescriptor* method);
     std::vector<std::string> rubyised_namespace_els(const google::protobuf::FileDescriptor* file);
-    std::string cpp_proto_wrapper_struct_name(const google::protobuf::Descriptor* message_type);
-    std::string cpp_proto_wrapper_struct_name_no_ns(const google::protobuf::Descriptor* message_type);
+    std::string cpp_proto_message_wrapper_struct_name(const google::protobuf::Descriptor* message_type);
+    std::string cpp_proto_message_wrapper_struct_name_no_ns(const google::protobuf::Descriptor* message_type);
+    std::string cpp_proto_service_wrapper_struct_name(const google::protobuf::ServiceDescriptor* service);
+    std::string cpp_proto_service_wrapper_struct_name_no_ns(const google::protobuf::ServiceDescriptor* service);
+    std::string cpp_proto_method_wrapper_struct_name(const google::protobuf::MethodDescriptor* method);
+    std::string cpp_proto_method_wrapper_struct_name_no_ns(const google::protobuf::MethodDescriptor* method);
     std::string cpp_field_name(const google::protobuf::FieldDescriptor* field);
     void add_entrypoint_files(google::protobuf::compiler::CodeGeneratorResponse &response);
 }

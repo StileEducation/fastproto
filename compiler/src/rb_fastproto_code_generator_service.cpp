@@ -1,0 +1,214 @@
+#include <iostream>
+
+#include <boost/algorithm/string.hpp>
+#include <boost/scoped_ptr.hpp>
+#include <boost/filesystem.hpp>
+#include <google/protobuf/io/zero_copy_stream.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+
+#include "rb_fastproto_code_generator.h"
+
+namespace rb_fastproto {
+    void RBFastProtoCodeGenerator::write_header_service_struct_definition(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::ServiceDescriptor* service,
+        google::protobuf::io::Printer &printer
+    ) const {
+        auto class_name = cpp_proto_service_wrapper_struct_name_no_ns(service);
+
+        printer.Print("// service $service_name$\n", "service_name", service->full_name());
+        printer.Print("struct $class_name$ {\n", "class_name", class_name);
+        printer.Indent();
+
+        printer.Print(
+            "static VALUE rb_cls;\n"
+            "\n"
+            "bool have_initialized;\n"
+            "\n"
+            "$class_name$(VALUE rb_self);\n"
+            "~$class_name$() = default;\n"
+            "\n"
+            "static void initialize_class();\n"
+            "static VALUE alloc(VALUE self);\n"
+            "static VALUE alloc();\n"
+            "static VALUE initialize(VALUE self);\n"
+            "static void free(char* memory);\n"
+            "static void mark(char* memory);\n"
+            "\n"
+            "static VALUE fully_qualified_name(VALUE self);\n"
+            "static VALUE rpcs(VALUE self);\n",
+            "class_name", class_name
+        );
+
+        printer.Outdent();
+        printer.Print("};\n\n");
+    }
+
+    std::string RBFastProtoCodeGenerator::write_cpp_service_struct(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::ServiceDescriptor* service,
+        google::protobuf::io::Printer &printer
+    ) const {
+        auto class_name = cpp_proto_service_wrapper_struct_name(service);
+
+        printer.Print(
+            "\n"
+            "// ----\n"
+            "// begin service: $service_name$\n"
+            "// ----\n"
+            "\n",
+            "service_name", service->full_name()
+        );
+
+        write_cpp_service_struct_constructor(file, service, class_name, printer);
+        write_cpp_service_struct_static_initializer(file, service, class_name, printer);
+        write_cpp_service_struct_allocators(file, service, class_name, printer);
+        write_cpp_service_struct_name(file, service, class_name, printer);
+        write_cpp_service_struct_rpcs(file, service, class_name, printer);
+
+        printer.Print("VALUE $class_name$::rb_cls = Qnil;\n", "class_name", class_name);
+
+        printer.Print(
+            "\n"
+            "// ----\n"
+            "// end service: $service_name$\n"
+            "// ----\n"
+            "\n",
+            "service_name", service->full_name()
+        );
+
+        return class_name;
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_service_struct_constructor(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::ServiceDescriptor* service,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print(
+            "$class_name$::$constructor_name$(VALUE self) : have_initialized(true) {}\n\n",
+            "class_name", class_name,
+            "constructor_name", cpp_proto_service_wrapper_struct_name_no_ns(service)
+        );
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_service_struct_static_initializer(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::ServiceDescriptor* service,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print("void $class_name$::initialize_class() {\n", "class_name", class_name);
+        printer.Indent();
+
+        printer.Print(
+            "rb_cls = rb_define_class_under(package_rb_module, \"$ruby_class_name$\", cls_fastproto_service);\n"
+            "rb_define_alloc_func(rb_cls, &alloc);\n"
+            "rb_define_method(rb_cls, \"initialize\", RUBY_METHOD_FUNC(&initialize), 0);\n"
+            "rb_define_singleton_method(rb_cls, \"rpcs\", RUBY_METHOD_FUNC(&rpcs), 0);\n"
+            "rb_define_singleton_method(rb_cls, \"fully_qualified_name\", RUBY_METHOD_FUNC(&fully_qualified_name), 0);\n",
+            "class_name", class_name,
+            "ruby_class_name", service->name(),
+            "service_full_name", service->full_name()
+        );
+
+        printer.Outdent();
+        printer.Print("}\n\n");
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_service_struct_allocators(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::ServiceDescriptor* service,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print(
+            "VALUE $class_name$::alloc(VALUE self) {\n"
+            "  auto memory = ruby_xmalloc(sizeof($class_name$));\n"
+            "  std::memset(memory, 0, sizeof($class_name$));\n"
+            "  return Data_Wrap_Struct(self, &mark, &free, memory);\n"
+            "}\n\n",
+            "class_name", class_name
+        );
+
+        printer.Print(
+            "VALUE $class_name$::alloc() {\n"
+            "  return alloc(rb_path2class(\"$rb_class_name$\"));\n"
+            "}\n\n",
+            "class_name", class_name,
+            "rb_class_name", ruby_proto_service_class_name(service)
+        );
+
+        printer.Print(
+            "VALUE $class_name$::initialize(VALUE self) {\n"
+            "  void* memory;\n"
+            "  Data_Get_Struct(self, void*, memory);\n"
+            "  new(memory) $class_name$(self);\n"
+            "  return self;\n"
+            "}\n\n",
+            "class_name", class_name
+        );
+
+        printer.Print(
+            "void $class_name$::free(char* memory) {\n"
+            "  auto obj = reinterpret_cast<$class_name$*>(memory);\n"
+            "  if (obj->have_initialized) {\n"
+            "    obj->~$destructor_name$();\n"
+            "  }\n"
+            "  ruby_xfree(memory);\n"
+            "}\n\n",
+            "class_name", class_name,
+            "destructor_name", cpp_proto_service_wrapper_struct_name_no_ns(service)
+        );
+
+        printer.Print(
+            "void $class_name$::mark(char* memory) {}\n\n",
+            "class_name", class_name
+        );
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_service_struct_name(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::ServiceDescriptor* service,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print(
+            "VALUE $class_name$::fully_qualified_name(VALUE self) {\n"
+            "  return rb_str_new2(\"$service_full_name$\");\n"
+            "}\n\n",
+            "class_name", class_name,
+            "service_full_name", service->full_name()
+        );
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_service_struct_rpcs(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::ServiceDescriptor* service,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print("VALUE $class_name$::rpcs(VALUE self) {\n", "class_name", class_name);
+        printer.Indent();
+
+        printer.Print("auto ary = rb_ary_new2($method_count$);\n\n", "method_count", std::to_string(service->method_count()));
+
+        for (auto i = 0; i < service->method_count(); i++) {
+            auto method = service->method(i);
+
+            printer.Print(
+                "rb_ary_store(ary, $offset$, rb_obj_freeze($method_class$::rb_cls));\n",
+                "offset", std::to_string(i),
+                "method_name", method->name(),
+                "method_class", cpp_proto_method_wrapper_struct_name(method)
+            );
+        }
+
+        printer.Print("\n");
+        printer.Print("return rb_obj_freeze(ary);\n");
+
+        printer.Outdent();
+        printer.Print("}\n\n");
+    }
+}

@@ -7,11 +7,13 @@
 #define __RB_FASTPROTO_INIT_H
 
 namespace rb_fastproto_gen {
-    // The topleve ::Fastproto module
+    // The top-level ::Fastproto module
     extern VALUE rb_fastproto_module;
 
-    // The base message class
+    // The base classes
     extern VALUE cls_fastproto_message;
+    extern VALUE cls_fastproto_service;
+    extern VALUE cls_fastproto_method;
 
     static inline unsigned int NUM2UINT_S(VALUE num) {
         if (RB_TYPE_P(num, T_FLOAT)) {

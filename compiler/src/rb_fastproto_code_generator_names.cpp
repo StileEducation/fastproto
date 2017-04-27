@@ -8,7 +8,6 @@
 
 // Some utils for working with filenames et al
 namespace rb_fastproto {
-
     std::string header_name_as_identifier(const google::protobuf::FileDescriptor* proto_file) {
         boost::filesystem::path header_file_path(header_path_for_proto(proto_file));
         auto header_path_no_ext = header_file_path.parent_path() / header_file_path.stem();
@@ -64,7 +63,7 @@ namespace rb_fastproto {
         return boost::str(boost::format("%s_descriptor_") % cpp_proto_class_name(message_type));
     }
 
-    std::string ruby_proto_class_name(const google::protobuf::Descriptor* message_type) {
+    std::string ruby_proto_message_class_name(const google::protobuf::Descriptor* message_type) {
         auto cpp_proto_ns = boost::join(rubyised_namespace_els(message_type->file()), "::");
         // Use a std::stack to push the parents up the chain, then append them to the namespace, most senior first
         std::stack<std::string> message_type_chain;
@@ -79,7 +78,7 @@ namespace rb_fastproto {
         return cpp_proto_ns;
     }
 
-    std::string cpp_proto_wrapper_struct_name(const google::protobuf::Descriptor* message_type) {
+    std::string cpp_proto_message_wrapper_struct_name(const google::protobuf::Descriptor* message_type) {
         std::string cpp_proto_ns("rb_fastproto_gen::");
         cpp_proto_ns += boost::join(rubyised_namespace_els(message_type->file()), "::");
         // Use a std::stack to push the parents up the chain, then append them to the namespace, most senior first
@@ -95,6 +94,46 @@ namespace rb_fastproto {
         return cpp_proto_ns;
     }
 
+    std::string cpp_proto_message_wrapper_struct_name_no_ns(const google::protobuf::Descriptor* message_type) {
+        return std::string("RB") + message_type->name();
+    }
+
+    std::string ruby_proto_service_class_name(const google::protobuf::ServiceDescriptor* service) {
+        return boost::join(rubyised_namespace_els(service->file()), "::") + "::" + service->name();
+    }
+
+    std::string cpp_proto_service_wrapper_struct_name(const google::protobuf::ServiceDescriptor* service) {
+        std::string cpp_proto_ns("rb_fastproto_gen::");
+        cpp_proto_ns += boost::join(rubyised_namespace_els(service->file()), "::");
+        cpp_proto_ns += "::RB";
+        cpp_proto_ns += service->name();
+        return cpp_proto_ns;
+    }
+
+    std::string cpp_proto_service_wrapper_struct_name_no_ns(const google::protobuf::ServiceDescriptor* service) {
+        std::string cpp_proto_ns("RB");
+        cpp_proto_ns += service->name();
+        return cpp_proto_ns;
+    }
+
+    std::string ruby_proto_method_class_name(const google::protobuf::MethodDescriptor* method) {
+        return boost::join(rubyised_namespace_els(method->service()->file()), "::") + "::" + method->service()->name() + method->name();
+    }
+
+    std::string cpp_proto_method_wrapper_struct_name(const google::protobuf::MethodDescriptor* method) {
+        std::string cpp_proto_ns("rb_fastproto_gen::");
+        cpp_proto_ns += boost::join(rubyised_namespace_els(method->service()->file()), "::");
+        cpp_proto_ns += "::RB";
+        cpp_proto_ns += method->service()->name() + method->name();
+        return cpp_proto_ns;
+    }
+
+    std::string cpp_proto_method_wrapper_struct_name_no_ns(const google::protobuf::MethodDescriptor* method) {
+        std::string cpp_proto_ns("RB");
+        cpp_proto_ns += method->service()->name() + method->name();
+        return cpp_proto_ns;
+    }
+
     std::vector<std::string> rubyised_namespace_els(const google::protobuf::FileDescriptor* file) {
         std::vector<std::string> namespace_els;
         boost::split(namespace_els, file->package(), boost::is_any_of("."));
@@ -104,13 +143,6 @@ namespace rb_fastproto {
             });
         }
         return namespace_els;
-    }
-
-
-    std::string cpp_proto_wrapper_struct_name_no_ns(const google::protobuf::Descriptor* message_type) {
-        std::string name("RB");
-        name += message_type->name();
-        return name;
     }
 
     // Rip this from cpp_helpers.cc to transform PB names to C++ field names
@@ -128,6 +160,7 @@ namespace rb_fastproto {
         "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t",
         "while", "xor", "xor_eq"
     };
+
     std::string cpp_field_name(const google::protobuf::FieldDescriptor* field) {
         std::string result = field->name();
         boost::to_lower(result);
