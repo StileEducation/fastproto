@@ -26,6 +26,10 @@ describe 'Generated code' do
             expect(::Fastproto::TestProtos::TestMessageOne.new.id).to eql(0)
         end
 
+        it 'has the correct instance_variables content' do
+            expect(::Fastproto::TestProtos::TestMessageOne.new.instance_variables).to eql(["id", "field_64"])
+        end
+
         it 'has reference semantics with strings' do
             m = ::Fastproto::TestProtos::TestMessageTwo.new
             m.str_field = "foo bar"
