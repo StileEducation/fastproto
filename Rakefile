@@ -3,26 +3,20 @@ require 'rspec/core/rake_task'
 
 task :build_compiler do
     cd 'compiler' do
-        sh 'make', 'rb_fastproto_compiler'
+        sh 'make', '-j', 'rb_fastproto_compiler'
     end
 end
 
 task :gen_test_protobufs => [:build_compiler] do
     cd 'spec' do
-        FileUtils.rm_rf('compiled_protobufs')
-        FileUtils.mkdir('compiled_protobufs')
-
-        sh *([
-            'protoc', '--cpp_out', 'compiled_protobufs', '--rb_fastproto_out', 'compiled_protobufs',
-            '--plugin=protoc-gen-rb_fastproto=../compiler/rb_fastproto_compiler'
-        ] + Dir['protobufs/**/*.proto'].map { |f| f.to_s })
+        sh 'make', '-j', 'compiled_protobufs/fastproto_gen.bundle'
     end
 end
 
 task :build_gen => [:gen_test_protobufs] do
     cd 'spec/compiled_protobufs' do
         sh 'ruby', 'extconf.rb'
-        sh 'make'
+        sh 'make', '-j'
     end
 end
 
