@@ -55,14 +55,12 @@ namespace rb_fastproto {
             const google::protobuf::Descriptor* message_type,
             google::protobuf::io::Printer &printer
         ) const;
-
         void write_header_message_struct_fields(
             const google::protobuf::FileDescriptor* file,
             const google::protobuf::Descriptor* message_type,
             const std::string &class_name,
             google::protobuf::io::Printer &printer
         ) const;
-
         void write_header_message_struct_accessors(
             const google::protobuf::FileDescriptor* file,
             const google::protobuf::Descriptor* message_type,
@@ -137,6 +135,30 @@ namespace rb_fastproto {
             google::protobuf::io::Printer &printer
         ) const;
         void write_cpp_message_struct_parser(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_message_struct_equality(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_message_struct_inspect(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_message_struct_singleton_parse(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_message_struct_singleton_field_for_name(
             const google::protobuf::FileDescriptor* file,
             const google::protobuf::Descriptor* message_type,
             const std::string &class_name,

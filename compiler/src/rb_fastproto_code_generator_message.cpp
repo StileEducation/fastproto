@@ -59,6 +59,10 @@ namespace rb_fastproto {
             "static VALUE get_nested(int argc, VALUE* argv, VALUE self);\n"
             "static VALUE get_nested_bang(int argc, VALUE* argv, VALUE self);\n"
             "static VALUE notify_default_changed(VALUE self, VALUE sender, VALUE notify_tag);\n"
+            "static VALUE equal_to(VALUE self, VALUE other);\n"
+            "static VALUE inspect(VALUE self);\n"
+            "static VALUE singleton_parse(VALUE self, VALUE buffer);\n"
+            "static VALUE singleton_field_for_name(VALUE self, VALUE name);\n"
             "\n"
             "VALUE to_proto_obj($cpp_proto_class$* cpp_proto);\n"
             "VALUE from_proto_obj(const $cpp_proto_class$& cpp_proto);\n",
@@ -161,8 +165,16 @@ namespace rb_fastproto {
         write_cpp_message_struct_validator(file, message_type, class_name, printer);
         // Define serialization methods
         write_cpp_message_struct_serializer(file, message_type, class_name, printer);
-        // Desserialization methods
+        // Deserialization methods
         write_cpp_message_struct_parser(file, message_type, class_name, printer);
+        // Equality methods
+        write_cpp_message_struct_equality(file, message_type, class_name, printer);
+        // inspect method
+        write_cpp_message_struct_inspect(file, message_type, class_name, printer);
+
+        // Singleton methods
+        write_cpp_message_struct_singleton_parse(file, message_type, class_name, printer);
+        write_cpp_message_struct_singleton_field_for_name(file, message_type, class_name, printer);
 
         // For some silly reason we need to initialized its static members at translation-unit scope?
         printer.Print("VALUE $class_name$::rb_cls = Qnil;\n", "class_name", class_name);
@@ -237,6 +249,7 @@ namespace rb_fastproto {
             "rb_define_method(rb_cls, \"initialize\", RUBY_METHOD_FUNC(&initialize), -1);\n"
             "rb_define_method(rb_cls, \"validate!\", RUBY_METHOD_FUNC(&validate), 0);\n"
             "rb_define_method(rb_cls, \"serialize_to_string\", RUBY_METHOD_FUNC(&serialize_to_string), 0);\n"
+            "rb_define_alias(rb_cls, \"to_s\", \"serialize_to_string\");\n"
             "rb_define_method(rb_cls, \"serialize_to_string_with_gvl\", RUBY_METHOD_FUNC(&serialize_to_string_with_gvl), 0);\n"
             "rb_define_method(rb_cls, \"parse\", RUBY_METHOD_FUNC(&parse), 1);\n"
             "rb_define_method(rb_cls, \"value_for_tag\", RUBY_METHOD_FUNC(&value_for_tag), 1);\n"
@@ -245,6 +258,12 @@ namespace rb_fastproto {
             "rb_define_method(rb_cls, \"get\", RUBY_METHOD_FUNC(&get_nested), -1);\n"
             "rb_define_method(rb_cls, \"get!\", RUBY_METHOD_FUNC(&get_nested_bang), -1);\n"
             "rb_define_method(rb_cls, \"notify_default_changed\", RUBY_METHOD_FUNC(&notify_default_changed), 2);\n"
+            "rb_define_method(rb_cls, \"equal_to\", RUBY_METHOD_FUNC(&equal_to), 1);\n"
+            "rb_define_alias(rb_cls, \"eql?\", \"equal_to\");\n"
+            "rb_define_alias(rb_cls, \"==\", \"equal_to\");\n"
+            "rb_define_method(rb_cls, \"inspect\", RUBY_METHOD_FUNC(&inspect), 0);\n"
+            "rb_define_singleton_method(rb_cls, \"parse\", RUBY_METHOD_FUNC(&singleton_parse), 1);\n"
+            "rb_define_singleton_method(rb_cls, \"field_for_name\", RUBY_METHOD_FUNC(&singleton_field_for_name), 1);\n"
             "\n",
             "ruby_namespace", message_type->containing_type() == nullptr ?
                 "package_rb_module" :
@@ -468,8 +487,8 @@ namespace rb_fastproto {
 
             printer.Print(
                 "VALUE $class_name$::set_$field_name$(VALUE self, VALUE val) {\n"
-                "    $class_name$* cpp_self;\n"
-                "    Data_Get_Struct(self, $class_name$, cpp_self);\n"
+                "  $class_name$* cpp_self;\n"
+                "  Data_Get_Struct(self, $class_name$, cpp_self);\n"
                 "\n",
                 "field_name", cpp_field_name(field),
                 "class_name", class_name
@@ -478,9 +497,9 @@ namespace rb_fastproto {
 
             printer.Print(
                 "if (RB_OBJ_FROZEN(self)) {\n"
-                "    rb_raise(rb_eRuntimeError, \"Message is frozen\");\n"
-                "    return Qnil;\n"
-                "}\n"
+                "  rb_raise(rb_eRuntimeError, \"Message is frozen\");\n"
+                "  return Qnil;\n"
+                "}\n\n"
             );
 
             // If nil was provided, interpret that as "unset"
@@ -505,24 +524,30 @@ namespace rb_fastproto {
                 printer.Print("cpp_self->has_field_$field_name$ = true;\n", "field_name", cpp_field_name(field));
             }
 
+            printer.Print("\n");
+
             printer.Print(
                 "if (cpp_self->is_default_value) {\n"
-                "    cpp_self->is_default_value = false;\n"
-                "    if (rb_ivar_get(self, rb_intern(\"@parent_for_notify\"))) {\n"
-                "        VALUE parent_for_notify = rb_ivar_get(self, rb_intern(\"@parent_for_notify\"));\n"
-                "        if (parent_for_notify != Qnil) {\n"
-                "            VALUE notify_tag = rb_ivar_get(self, rb_intern(\"@tag_for_notify\"));\n"
-                "            rb_funcall(parent_for_notify, rb_intern(\"notify_default_changed\"), 2, self, notify_tag);\n"
-                "            rb_ivar_set(self, rb_intern(\"@parent_for_notify\"), Qnil);\n"
-                "        }\n"
+                "  cpp_self->is_default_value = false;\n"
+                "\n"
+                "  if (rb_ivar_get(self, rb_intern(\"@parent_for_notify\"))) {\n"
+                "    VALUE parent_for_notify = rb_ivar_get(self, rb_intern(\"@parent_for_notify\"));\n"
+                "\n"
+                "    if (parent_for_notify != Qnil) {\n"
+                "      VALUE notify_tag = rb_ivar_get(self, rb_intern(\"@tag_for_notify\"));\n"
+                "\n"
+                "      rb_funcall(parent_for_notify, rb_intern(\"notify_default_changed\"), 2, self, notify_tag);\n"
+                "      rb_ivar_set(self, rb_intern(\"@parent_for_notify\"), Qnil);\n"
                 "    }\n"
+                "  }\n"
                 "}\n"
             );
 
             printer.Outdent();
-            printer.Print("}\n");
+            printer.Print("}\n\n");
 
             printer.Print("return Qnil;\n");
+
             printer.Outdent();
             printer.Print("}\n");
 
@@ -611,7 +636,7 @@ namespace rb_fastproto {
             "        rb_raise(rb_eKeyError, \"Tag not found\");\n"
             "        return Qnil;\n"
             "    }\n"
-            "    ID method; { method = rb_intern((std::string(\"has_\") + field_descriptor->name() + \"?\").c_str()); }\n"
+            "    auto method = rb_intern((std::string(\"has_\") + field_descriptor->name() + \"?\").c_str());\n"
             "    return rb_funcall(self, method, 0);\n"
             "}\n"
             "\n"
@@ -833,7 +858,7 @@ namespace rb_fastproto {
 
             printer.Outdent();
             if (field->is_optional()) {
-                printer.Print("} else {\n"); // close of if (required | set)
+                printer.Print("} else {\n"); // close off if (required | set)
                 printer.Print("    _cpp_proto->clear_$field_name$();\n", "field_name", cpp_field_name(field));
             }
             printer.Print("}\n");
@@ -983,7 +1008,7 @@ namespace rb_fastproto {
 
             printer.Outdent();
             if (field->is_optional()) {
-                printer.Print("} else {\n"); // close of if (required | set)
+                printer.Print("} else {\n"); // close off if (required | set)
                 printer.Print("   has_field_$field_name$ = false;\n", "field_name", cpp_field_name(field));
             }
             printer.Print("}\n");
@@ -1149,5 +1174,162 @@ namespace rb_fastproto {
             "class_name", class_name,
             "cpp_proto_class", cpp_proto_class_name(message_type)
         );
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_message_struct_equality(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print("VALUE $class_name$::equal_to(VALUE self, VALUE other) {\n", "class_name", class_name);
+        printer.Indent();
+
+        printer.Print(
+            "if (rb_funcall(other, rb_intern(\"is_a?\"), 1, rb_cls) != Qtrue) {\n"
+            "  return Qfalse;\n"
+            "}\n"
+            "\n"
+            "$class_name$ *cpp_self, *cpp_other;\n"
+            "Data_Get_Struct(self, $class_name$, cpp_self);\n"
+            "Data_Get_Struct(other, $class_name$, cpp_other);\n"
+            "\n"
+            "if (cpp_self->is_default_value && cpp_other->is_default_value) {\n"
+            "  return Qtrue;\n"
+            "}\n"
+            "\n",
+            "class_name", class_name
+        );
+
+        for (int i = 0; i < message_type->field_count(); i++) {
+            auto field = message_type->field(i);
+
+            if (field->is_optional()) {
+                printer.Print(
+                    "if (cpp_self->has_$field_name$ != cpp_other->has_$field_name$) {\n"
+                    "  return Qfalse;\n"
+                    "}\n"
+                    "\n",
+                    "field_name", cpp_field_name(field)
+                );
+            }
+
+            printer.Print(
+                "if (rb_funcall(cpp_self->field_$field_name$, rb_intern(\"==\"), 1, cpp_other->field_$field_name$) == Qfalse) {\n"
+                "  return Qfalse;\n"
+                "}\n"
+                "\n",
+                "field_name", cpp_field_name(field)
+            );
+        }
+
+        printer.Print("return Qtrue;\n");
+
+        printer.Outdent();
+        printer.Print("}\n\n");
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_message_struct_inspect(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print("VALUE $class_name$::inspect(VALUE self) {\n", "class_name", class_name);
+        printer.Indent();
+
+        printer.Print(
+            "$class_name$* cpp_self;\n"
+            "Data_Get_Struct(self, $class_name$, cpp_self);\n"
+            "\n",
+            "class_name", class_name
+        );
+        printer.Indent();
+
+        printer.Print("std::string str(\"#<$rb_class_name$\");\n", "rb_class_name", ruby_proto_message_class_name(message_type));
+        for (int i = 0; i < message_type->field_count(); i++) {
+            auto field = message_type->field(i);
+            printer.Print("str += \" $field_name$=\";\n", "field_name", field->lowercase_name());
+
+            if (field->is_optional()) {
+                printer.Print(
+                    "if (cpp_self->has_field_$field_name$ && cpp_self->field_$field_name$ != Qnil) {\n"
+                    "  VALUE d = rb_funcall(cpp_self->field_$field_name$, rb_intern(\"inspect\"), 0);\n"
+                    "  str += StringValueCStr(d);\n"
+                    "} else {\n"
+                    "  str += \"<unset>\";\n"
+                    "}\n",
+                    "field_name", cpp_field_name(field)
+                );
+            } else {
+                printer.Print(
+                    "if (cpp_self->field_$field_name$ != Qnil) {\n"
+                    "  VALUE d = rb_funcall(cpp_self->field_$field_name$, rb_intern(\"inspect\"), 0);\n"
+                    "  str += StringValueCStr(d);\n"
+                    "} else {\n"
+                    "  str += \"<unset>\";\n"
+                    "}\n",
+                    "field_name", cpp_field_name(field)
+                );
+            }
+        }
+        printer.Print("str += \">\";\n");
+
+        printer.Print("return rb_str_new2(str.c_str());\n");
+
+        printer.Outdent();
+        printer.Print("}\n\n");
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_message_struct_singleton_parse(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print(
+            "VALUE $class_name$::singleton_parse(VALUE self, VALUE buffer) {\n"
+            "  VALUE msg = rb_funcall(rb_cls, rb_intern(\"new\"), 0);\n"
+            "  rb_funcall(msg, rb_intern(\"parse\"), 1, buffer);\n"
+            "  return msg;\n"
+            "}\n\n",
+            "class_name", class_name
+        );
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_message_struct_singleton_field_for_name(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print("VALUE $class_name$::singleton_field_for_name(VALUE self, VALUE name) {\n", "class_name", class_name);
+        printer.Indent();
+
+        printer.Print(
+            "std::string str(rb_id2name(SYM2ID(rb_to_symbol(name))));\n"
+            "\n"
+        );
+
+        for (int i = 0; i < message_type->field_count(); i++) {
+            auto field = message_type->field(i);
+
+            printer.Print(
+                "if (str == \"$lowercase_name$\" || str == \"$camelcase_name$\") {\n"
+                "  return rb_funcall(cls_fastproto_field, rb_intern(\"new\"), 1, INT2FIX($number$));\n"
+                "}\n"
+                "\n",
+                "lowercase_name", field->lowercase_name(),
+                "camelcase_name", field->camelcase_name(),
+                "number", std::to_string(field->number())
+            );
+        }
+
+        printer.Print(
+            "return Qnil;\n"
+        );
+
+        printer.Outdent();
+        printer.Print("}\n\n");
     }
 }

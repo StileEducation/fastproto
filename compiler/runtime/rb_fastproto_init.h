@@ -14,6 +14,7 @@ namespace rb_fastproto_gen {
     extern VALUE cls_fastproto_message;
     extern VALUE cls_fastproto_service;
     extern VALUE cls_fastproto_method;
+    extern VALUE cls_fastproto_field;
 
     static inline unsigned int NUM2UINT_S(VALUE num) {
         if (RB_TYPE_P(num, T_FLOAT)) {

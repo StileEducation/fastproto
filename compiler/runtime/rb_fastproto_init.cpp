@@ -8,10 +8,12 @@ namespace rb_fastproto_gen {
     VALUE cls_fastproto_message = Qnil;
     VALUE cls_fastproto_service = Qnil;
     VALUE cls_fastproto_method = Qnil;
+    VALUE cls_fastproto_field = Qnil;
 
     static void define_message_class();
     static void define_service_class();
     static void define_method_class();
+    static void define_field_class();
 }
 
 extern "C" void Init_fastproto_gen(void) {
@@ -21,6 +23,7 @@ extern "C" void Init_fastproto_gen(void) {
     rb_fastproto_gen::define_message_class();
     rb_fastproto_gen::define_service_class();
     rb_fastproto_gen::define_method_class();
+    rb_fastproto_gen::define_field_class();
 
     // @@protoc_insertion_point(init_entrypoints)
 }
@@ -36,5 +39,21 @@ namespace rb_fastproto_gen {
 
     static void define_method_class() {
         cls_fastproto_method = rb_define_class_under(rb_fastproto_module, "Method", rb_cObject);
+    }
+
+    static VALUE cls_fastproto_field_initialize(VALUE self, VALUE tag) {
+        Check_Type(tag, T_FIXNUM);
+        rb_ivar_set(self, rb_intern("@tag"), tag);
+        return self;
+    }
+
+    static VALUE cls_fastproto_field_tag(VALUE self) {
+        return rb_ivar_get(self, rb_intern("@tag"));
+    }
+
+    static void define_field_class() {
+        cls_fastproto_field = rb_define_class_under(rb_fastproto_module, "Field", rb_cObject);
+        rb_define_method(cls_fastproto_field, "initialize", RUBY_METHOD_FUNC(&cls_fastproto_field_initialize), 1);
+        rb_define_method(cls_fastproto_field, "tag", RUBY_METHOD_FUNC(&cls_fastproto_field_tag), 0);
     }
 }
