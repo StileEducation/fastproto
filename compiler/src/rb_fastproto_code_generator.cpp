@@ -84,7 +84,8 @@ namespace rb_fastproto {
         // Define a method that the overall-init will call to define the ruby classes & modules contained
         // in this file.
         printer.Print(
-            "void _Init();\n"
+            "void _Init_$file_name$();\n",
+            "file_name", header_name_as_identifier(file)
         );
 
         for (auto&& ns : namespace_parts) {
@@ -114,13 +115,29 @@ namespace rb_fastproto {
             "#include <functional>\n"
             "#include <tuple>\n"
             "#include <typeinfo>\n"
-            "#include \"rb_fastproto_init.h\"\n"
-            "#include \"$header_name$\"\n"
-            "#include \"$pb_header_name$\"\n"
             "\n"
-            "namespace rb_fastproto_gen {\n",
+            "#include \"rb_fastproto_init.h\"\n"
+        );
+
+        for (int i = 0; i < file->dependency_count(); i++) {
+            printer.Print(
+                "#include \"$header_name$\"\n"
+                "#include \"$pb_header_name$\"\n",
+                "header_name", header_path_for_proto(file->dependency(i)),
+                "pb_header_name", cpp_proto_header_path_for_proto(file->dependency(i))
+            );
+        }
+
+        printer.Print(
+            "#include \"$header_name$\"\n"
+            "#include \"$pb_header_name$\"\n",
             "header_name", header_path_for_proto(file),
             "pb_header_name", cpp_proto_header_path_for_proto(file)
+        );
+
+        printer.Print(
+            "\n"
+            "namespace rb_fastproto_gen {\n"
         );
 
         printer.Indent();
@@ -170,7 +187,7 @@ namespace rb_fastproto {
         const std::vector<std::string> &class_names,
         google::protobuf::io::Printer &printer
     ) const {
-        printer.Print("void _Init() {\n");
+        printer.Print("void _Init_$file_name$() {\n", "file_name", header_name_as_identifier(file));
 
         printer.Indent();
 

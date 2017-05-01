@@ -37,8 +37,9 @@ namespace rb_fastproto {
             "header", header_path_for_proto(file)
         );
         entrypoint_insertion_printer.Print(
-            "rb_fastproto_gen::$package_ns$::_Init();\n",
-            "package_ns", boost::join(rubyised_namespace_els(file), "::")
+            "rb_fastproto_gen::$package_ns$::_Init_$file_name$();\n",
+            "package_ns", boost::join(rubyised_namespace_els(file), "::"),
+            "file_name", header_name_as_identifier(file)
         );
     }
 
