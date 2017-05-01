@@ -728,13 +728,13 @@ namespace rb_fastproto {
         // before re-raising the exception to ruby.
         printer.Print(
             "struct dangerous_func_data {\n"
-            "    decltype(cpp_proto) cpp_proto;\n"
+            "    decltype(cpp_proto) _cpp_proto;\n"
             "    $class_name$* self;\n"
             "};\n"
             "auto dangerous_func = [](VALUE data_as_value) -> VALUE {\n"
             "    // Unwrap our 'VALUE' into an actual pointer\n"
             "    auto data = reinterpret_cast<dangerous_func_data*>(rb_data_object_get(data_as_value));\n"
-            "    auto _cpp_proto = data->cpp_proto;\n"
+            "    auto _cpp_proto = data->_cpp_proto;\n"
             "    auto _self = data->self;\n",
             "class_name", class_name
         );
@@ -874,7 +874,7 @@ namespace rb_fastproto {
             "};\n"
             "int exc_status;\n"
             "dangerous_func_data data_struct;\n"
-            "data_struct.cpp_proto = cpp_proto;\n"
+            "data_struct._cpp_proto = cpp_proto;\n"
             "data_struct.self = this;\n"
             "VALUE data_struct_as_value = rb_data_object_wrap(rb_cObject, &data_struct, nullptr, [](void* _){});\n"
             "rb_protect(dangerous_func, data_struct_as_value, &exc_status);\n"
