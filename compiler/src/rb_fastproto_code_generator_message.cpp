@@ -1244,7 +1244,6 @@ namespace rb_fastproto {
             "\n",
             "class_name", class_name
         );
-        printer.Indent();
 
         printer.Print("std::string str(\"#<$rb_class_name$\");\n", "rb_class_name", ruby_proto_message_class_name(message_type));
         for (int i = 0; i < message_type->field_count(); i++) {
