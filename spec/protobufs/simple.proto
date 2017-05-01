@@ -1,0 +1,12 @@
+package simple;
+
+message Test1 {
+  optional string test_field = 1;
+  repeated int32 i1 = 2;
+};
+
+message Foo {}
+
+message Bar {
+  optional Foo foo = 1;
+};
