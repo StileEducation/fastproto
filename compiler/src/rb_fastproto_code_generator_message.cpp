@@ -284,6 +284,12 @@ namespace rb_fastproto {
             );
         }
 
+        printer.Print(
+            "rb_funcall(rb_cv_get(cls_fastproto_message, \"@@message_classes\"), rb_intern(\"[]=\"), 2, rb_str_new2(\"$package$.$message_name$\"), rb_cls);\n",
+            "package", file->package(),
+            "message_name", message_type->name()
+        );
+
         // Initialize any submessages too
         for (int i = 0; i < message_type->nested_type_count(); i++ ) {
             printer.Print("$subtype$::initialize_class();\n", "subtype", cpp_proto_message_wrapper_struct_name(message_type->nested_type(i)));

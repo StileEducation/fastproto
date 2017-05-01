@@ -29,8 +29,15 @@ extern "C" void Init_fastproto_gen(void) {
 }
 
 namespace rb_fastproto_gen {
+    static VALUE cls_fastproto_message_find_by_fully_qualified_name(VALUE self, VALUE name) {
+        Check_Type(name, T_STRING);
+        return rb_funcall(rb_cv_get(self, "@@message_classes"), rb_intern("[]"), 1, name);
+    }
+
     static void define_message_class() {
         cls_fastproto_message = rb_define_class_under(rb_fastproto_module, "Message", rb_cObject);
+        rb_cv_set(cls_fastproto_message, "@@message_classes", rb_hash_new());
+        rb_define_singleton_method(cls_fastproto_message, "find_by_fully_qualified_name", RUBY_METHOD_FUNC(&cls_fastproto_message_find_by_fully_qualified_name), 1);
     }
 
     static void define_service_class() {

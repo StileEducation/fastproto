@@ -252,4 +252,14 @@ describe ::Fastproto, "message" do
     a1.has_sub2?.should == true
     a1.sub2.has_subsub1?.should == true
   end
+
+  it "should find a class by its fully-qualified name" do
+    a1 = ::Fastproto::Message.find_by_fully_qualified_name("simple.Test1")
+    a1.should == Simple::Test1
+  end
+
+  it "should find nil for an invalid fully-qualified name" do
+    a1 = ::Fastproto::Message.find_by_fully_qualified_name("simple.Test1xxxxxx")
+    a1.should == nil
+  end
 end
