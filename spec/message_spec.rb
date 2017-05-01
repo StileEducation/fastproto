@@ -262,4 +262,12 @@ describe ::Fastproto, "message" do
     a1 = ::Fastproto::Message.find_by_fully_qualified_name("simple.Test1xxxxxx")
     a1.should == nil
   end
+
+  it "should have .fields on the class and the instance" do
+    fields1 = Featureful::A.fields
+    fields2 = Featureful::A.new.fields
+    fields1.should == fields2
+
+    puts fields1
+  end
 end
