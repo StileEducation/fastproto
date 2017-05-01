@@ -1,0 +1,20 @@
+syntax = "proto2";
+
+package import_protobuf_internals;
+
+import "google/protobuf/descriptor.proto";
+
+message Test1 {
+  optional string test_field = 1;
+  repeated int32 i1 = 2;
+};
+
+message Foo {}
+
+message Bar {
+  optional Foo foo = 1;
+};
+
+message X {
+  required google.protobuf.DescriptorProto desc = 1;
+};

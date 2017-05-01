@@ -2,7 +2,7 @@ syntax = "proto2";
 
 package include;
 
-import "protobufs/include_child.proto";
+import "include_child.proto";
 
 message ParentMessage {
 	required include.ChildMessage msg = 1;
