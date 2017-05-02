@@ -1,7 +1,6 @@
 // Generated code that calls all the entrypoints
 #include "rb_fastproto_init.h"
-
-// @@protoc_insertion_point(init_file_header)
+#include "rb_fastproto_init_thunks.h"
 
 namespace rb_fastproto_gen {
     VALUE rb_fastproto_module = Qnil;
@@ -49,7 +48,10 @@ extern "C" void Init_fastproto_gen(void) {
     rb_fastproto_gen::define_field_message_class();
     rb_fastproto_gen::define_field_unknown_class();
 
-    // @@protoc_insertion_point(init_entrypoints)
+    // Now call all the initialisation thunks for each protobuf class in rb_fastproto_init_thunks.h
+    for (int i = 0; i < rb_fastproto_init_thunks_len; i++) {
+        rb_fastproto_init_thunks[i]();
+    }
 }
 
 namespace rb_fastproto_gen {

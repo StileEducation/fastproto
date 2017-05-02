@@ -28,8 +28,6 @@ namespace rb_fastproto {
         write_header(file, header_printer);
         write_cpp(file, cpp_printer);
 
-        write_entrypoint(file, output_directory);
-
         return true;
     }
 
@@ -83,8 +81,12 @@ namespace rb_fastproto {
 
         // Define a method that the overall-init will call to define the ruby classes & modules contained
         // in this file.
+        // In a comment, mention the full name of this symbol. rb_fastproto_init_thunks.h.erb templates out
+        // an array of function pointers based on searching .fastproto.cpp files for this comment.
         printer.Print(
+            "// @@rb_fastproto_init_thunk(rb_fastproto_gen::$package_ns$::_Init_$file_name$)\n"
             "void _Init_$file_name$();\n",
+            "package_ns", boost::join(namespace_parts, "::"),
             "file_name", header_name_as_identifier(file)
         );
 

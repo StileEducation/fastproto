@@ -1,0 +1,45 @@
+require 'erb'
+
+# We generate .bundle on OSX and .so on linux
+SHLIB_EXT = if RUBY_PLATFORM =~ /darwin/
+    'bundle'
+else
+    'so'
+end
+
+# rb_fastproto_init_thunks.h only changes when the list of files changes.
+file 'Makefile' => ['extconf.rb', 'rb_fastproto_init_thunks.h'] do
+    puts "Running extconf.rb"
+    sh 'ruby', 'extconf.rb'
+end
+
+file "rb_fastproto_init_thunks.h" => [Dir.glob('**/*.fastproto.h'), 'rb_fastproto_init_thunks.h.erb'].flatten do
+    template = File.read('rb_fastproto_init_thunks.h.erb')
+    engine = ERB.new(template)
+
+    new_file_contents = engine.result
+
+    # Only write the file if it changed. This saves us from needlessly regenerating the makefile over and again
+    needs_regen = if !File.exist?('rb_fastproto_init_thunks.h')
+        true
+    else
+        old_file_contents = File.read('rb_fastproto_init_thunks.h')
+        new_file_contents != old_file_contents
+    end
+
+    if needs_regen
+        File.open('rb_fastproto_init_thunks.h', 'w') do |f|
+            puts "overwriting thunk"
+            f.write new_file_contents
+        end
+    end
+end
+
+
+file "fastproto_gen.#{SHLIB_EXT}" => [Dir.glob('**/*.{cpp,cc,h}'), 'Makefile', 'rb_fastproto_init_thunks.h'].flatten do
+    puts "running make"
+    sh 'make'
+end
+
+task :compile => "fastproto_gen.#{SHLIB_EXT}"
+task :default => :compile
