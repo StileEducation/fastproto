@@ -8,16 +8,19 @@ dir_config('protobuf')
 
 # All of our objects are in subdirectories (that match the original proto subdirectories)
 # but mkmf only compiles stuff in the toplevel. Fix by editing $srcs and $VPATH
-$srcs = Dir.glob('**/*.{cpp,cc,c}')
-Dir.glob('**/*').select { |d| File.directory? d }.each do |dir|
-    $VPATH << "$(srcdir)/#{dir}"
+$srcs = Dir.glob('**/*.{cpp,cc,c}').map do |name|
+  name.gsub(/\//, '__REPLACE_WITH_A_SLASH__')
 end
 
 unless have_library('protobuf')
-    abort "protobuf is missing. please install protobuf"
+  abort "protobuf is missing. please install protobuf"
 end
 
 create_makefile('fastproto_gen')
+
+makefile_text = File.read('Makefile')
+makefile_text_with_slashes = makefile_text.gsub(/__REPLACE_WITH_A_SLASH__/, '/')
+File.open('Makefile', 'w') { |f| f.write makefile_text_with_slashes }
 
 # Hack at the generated makefile - it includes this rule:
 # $(OBJS): $(HDRS) $(ruby_headers)
