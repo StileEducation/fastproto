@@ -49,10 +49,6 @@ end
                                 .gsub(/\.proto$/, '.fastproto.cpp')
     file fastproto_cpp_file => ['spec/compiled_protobufs', proto_f, FASTPROTO_COMPILER] do
 
-        ['spec/compiled_protobufs', proto_f, FASTPROTO_COMPILER, fastproto_cpp_file].each do |f|
-            puts "#{f} mtime: #{File.exist?(f) ? File.mtime(f) : 'Nonexistent'}"
-        end
-
         sh 'protoc', '--rb-fastproto_out', 'spec/compiled_protobufs',
             "--plugin=protoc-gen-rb-fastproto=#{FASTPROTO_COMPILER}",
             '-I', 'spec/protobufs', '-I', LIBPROTOBUF_HEADER_DIR_BASE,
