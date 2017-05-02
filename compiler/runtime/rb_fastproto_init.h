@@ -21,7 +21,9 @@ namespace rb_fastproto_gen {
     extern VALUE cls_fastproto_field_bytes;
     extern VALUE cls_fastproto_field_string;
     extern VALUE cls_fastproto_field_enum;
+    extern VALUE cls_fastproto_field_aggregate;
     extern VALUE cls_fastproto_field_message;
+    extern VALUE cls_fastproto_field_group;
     extern VALUE cls_fastproto_field_unknown;
 
     static inline unsigned int NUM2UINT_S(VALUE num) {

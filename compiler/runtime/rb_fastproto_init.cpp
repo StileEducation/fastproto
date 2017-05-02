@@ -14,7 +14,9 @@ namespace rb_fastproto_gen {
     VALUE cls_fastproto_field_bytes = Qnil;
     VALUE cls_fastproto_field_string = Qnil;
     VALUE cls_fastproto_field_enum = Qnil;
+    VALUE cls_fastproto_field_aggregate = Qnil;
     VALUE cls_fastproto_field_message = Qnil;
+    VALUE cls_fastproto_field_group = Qnil;
     VALUE cls_fastproto_field_unknown = Qnil;
 
     static void define_message_class();
@@ -27,7 +29,9 @@ namespace rb_fastproto_gen {
     static void define_field_bytes_class();
     static void define_field_string_class();
     static void define_field_enum_class();
+    static void define_field_aggregate_class();
     static void define_field_message_class();
+    static void define_field_group_class();
     static void define_field_unknown_class();
 }
 
@@ -45,7 +49,9 @@ extern "C" void Init_fastproto_gen(void) {
     rb_fastproto_gen::define_field_bytes_class();
     rb_fastproto_gen::define_field_string_class();
     rb_fastproto_gen::define_field_enum_class();
+    rb_fastproto_gen::define_field_aggregate_class();
     rb_fastproto_gen::define_field_message_class();
+    rb_fastproto_gen::define_field_group_class();
     rb_fastproto_gen::define_field_unknown_class();
 
     // Now call all the initialisation thunks for each protobuf class in rb_fastproto_init_thunks.h
@@ -117,12 +123,44 @@ namespace rb_fastproto_gen {
         cls_fastproto_field_string = rb_define_class_under(rb_fastproto_module, "FieldString", cls_fastproto_field);
     }
 
+    static VALUE cls_fastproto_field_enum_initialize(VALUE self, VALUE tag, VALUE name, VALUE value_to_name) {
+        Check_Type(tag, T_FIXNUM);
+        Check_Type(name, T_STRING);
+        Check_Type(value_to_name, T_HASH);
+        VALUE args[] = { tag, name };
+        rb_call_super(2, args);
+        rb_ivar_set(self, rb_intern("@value_to_name"), value_to_name);
+        return self;
+    }
+
     static void define_field_enum_class() {
         cls_fastproto_field_enum = rb_define_class_under(rb_fastproto_module, "FieldEnum", cls_fastproto_field);
+        rb_define_method(cls_fastproto_field_enum, "initialize", RUBY_METHOD_FUNC(&cls_fastproto_field_enum_initialize), 3);
+        rb_define_attr(cls_fastproto_field_enum, "value_to_name", 1, 0);
+    }
+
+    static VALUE cls_fastproto_field_aggregate_initialize(VALUE self, VALUE tag, VALUE name, VALUE proxy_class) {
+        Check_Type(tag, T_FIXNUM);
+        Check_Type(name, T_STRING);
+        Check_Type(proxy_class, T_CLASS);
+        VALUE args[] = { tag, name };
+        rb_call_super(2, args);
+        rb_ivar_set(self, rb_intern("@proxy_class"), proxy_class);
+        return self;
+    }
+
+    static void define_field_aggregate_class() {
+        cls_fastproto_field_aggregate = rb_define_class_under(rb_fastproto_module, "FieldAggregate", cls_fastproto_field);
+        rb_define_method(cls_fastproto_field_aggregate, "initialize", RUBY_METHOD_FUNC(&cls_fastproto_field_aggregate_initialize), 3);
+        rb_define_attr(cls_fastproto_field_aggregate, "proxy_class", 1, 0);
     }
 
     static void define_field_message_class() {
-        cls_fastproto_field_message = rb_define_class_under(rb_fastproto_module, "FieldMessage", cls_fastproto_field);
+        cls_fastproto_field_message = rb_define_class_under(rb_fastproto_module, "FieldMessage", cls_fastproto_field_aggregate);
+    }
+
+    static void define_field_group_class() {
+        cls_fastproto_field_group = rb_define_class_under(rb_fastproto_module, "FieldGroup", cls_fastproto_field_aggregate);
     }
 
     static void define_field_unknown_class() {

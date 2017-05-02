@@ -1,0 +1,7 @@
+syntax = "proto2";
+
+package dir2;
+
+message M {
+  optional string F = 1;
+};

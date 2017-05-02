@@ -267,7 +267,19 @@ describe ::Fastproto, "message" do
     fields1 = Featureful::A.fields
     fields2 = Featureful::A.new.fields
     fields1.should == fields2
+  end
 
-    puts fields1
+  it "should have field descriptors of the correct types" do
+    Featureful::A::Sub.fields["payload"].should be_a ::Fastproto::FieldString
+    Featureful::A::Sub.fields["payload_type"].should be_a ::Fastproto::FieldEnum
+    Featureful::A::Sub.fields["subsub1"].should be_a ::Fastproto::FieldMessage
+  end
+
+  it "should have value_to_name on enum field descriptors" do
+    Featureful::A::Sub.fields["payload_type"].value_to_name.should == { 0 => "P1", 1 => "P2" }
+  end
+
+  it "should have proxy_class set correctly for message fields" do
+    Featureful::A.fields["sub1"].proxy_class.should == Featureful::A::Sub
   end
 end

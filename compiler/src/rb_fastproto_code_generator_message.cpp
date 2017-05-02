@@ -268,6 +268,7 @@ namespace rb_fastproto {
             "rb_define_singleton_method(rb_cls, \"parse\", RUBY_METHOD_FUNC(&singleton_parse), 1);\n"
             "rb_define_singleton_method(rb_cls, \"fields\", RUBY_METHOD_FUNC(&singleton_fields), 0);\n"
             "rb_define_singleton_method(rb_cls, \"field_for_name\", RUBY_METHOD_FUNC(&singleton_field_for_name), 1);\n"
+            "rb_cv_set(rb_cls, \"@@fields\", Qnil);\n"
             "\n",
             "ruby_namespace", message_type->containing_type() == nullptr ?
                 "package_rb_module" :
@@ -298,83 +299,6 @@ namespace rb_fastproto {
         for (int i = 0; i < message_type->nested_type_count(); i++ ) {
             printer.Print("$subtype$::initialize_class();\n", "subtype", cpp_proto_message_wrapper_struct_name(message_type->nested_type(i)));
         }
-
-        printer.Print("\n");
-        printer.Print("auto fields = rb_hash_new();\n");
-        for(int i =  0; i < message_type->field_count(); i++) {
-            auto field = message_type->field(i);
-
-            switch (field->type()) {
-                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SINT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
-                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_SINT64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
-                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
-                    printer.Print(
-                        "rb_funcall(fields, rb_intern(\"[]=\"), 2, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_integer, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
-                        "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
-                    );
-                    break;
-                case google::protobuf::FieldDescriptor::Type::TYPE_FLOAT:
-                case google::protobuf::FieldDescriptor::Type::TYPE_DOUBLE:
-                    printer.Print(
-                        "rb_funcall(fields, rb_intern(\"[]=\"), 2, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_float, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
-                        "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
-                    );
-                    break;
-                case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
-                    printer.Print(
-                        "rb_funcall(fields, rb_intern(\"[]=\"), 2, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_bool, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
-                        "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
-                    );
-                    break;
-                case google::protobuf::FieldDescriptor::Type::TYPE_BYTES:
-                    printer.Print(
-                        "rb_funcall(fields, rb_intern(\"[]=\"), 2, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_bytes, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
-                        "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
-                    );
-                    break;
-                case google::protobuf::FieldDescriptor::Type::TYPE_STRING:
-                    printer.Print(
-                        "rb_funcall(fields, rb_intern(\"[]=\"), 2, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_string, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
-                        "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
-                    );
-                    break;
-                case google::protobuf::FieldDescriptor::Type::TYPE_ENUM:
-                    printer.Print(
-                        "rb_funcall(fields, rb_intern(\"[]=\"), 2, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_enum, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
-                        "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
-                    );
-                    break;
-                case google::protobuf::FieldDescriptor::Type::TYPE_MESSAGE:
-                case google::protobuf::FieldDescriptor::Type::TYPE_GROUP:
-                    printer.Print(
-                        "rb_funcall(fields, rb_intern(\"[]=\"), 2, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_message, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
-                        "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
-                    );
-                    break;
-                default:
-                    printer.Print(
-                        "rb_funcall(fields, rb_intern(\"[]=\"), 2, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_unknown, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
-                        "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
-                    );
-                    break;
-            }
-        }
-        printer.Print("rb_cv_set(rb_cls, \"@@fields\", fields);\n");
 
         printer.Outdent();
         printer.Print("}\n\n");
@@ -1424,11 +1348,134 @@ namespace rb_fastproto {
         const std::string &class_name,
         google::protobuf::io::Printer &printer
     ) const {
+        printer.Print("VALUE $class_name$::singleton_fields(VALUE self) {\n", "class_name", class_name);
+        printer.Indent();
+
         printer.Print(
-            "VALUE $class_name$::singleton_fields(VALUE self) {\n"
-            "  return rb_cv_get(rb_cls, \"@@fields\");\n"
-            "}\n",
-            "class_name", class_name
+            "auto fields = rb_cv_get(rb_cls, \"@@fields\");\n"
+            "if (fields != Qnil) {\n"
+            "  return fields;\n"
+            "}\n"
+            "\n"
         );
+
+        printer.Print("fields = rb_hash_new();\n");
+
+        for(int i =  0; i < message_type->field_count(); i++) {
+            auto field = message_type->field(i);
+
+            switch (field->type()) {
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SINT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED32:
+                case google::protobuf::FieldDescriptor::Type::TYPE_INT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SFIXED64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_SINT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
+                case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
+                    printer.Print(
+                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_integer, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "field_number", std::to_string(field->number()),
+                        "field_name", cpp_field_name(field)
+                    );
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_FLOAT:
+                case google::protobuf::FieldDescriptor::Type::TYPE_DOUBLE:
+                    printer.Print(
+                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_float, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "field_number", std::to_string(field->number()),
+                        "field_name", cpp_field_name(field)
+                    );
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
+                    printer.Print(
+                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_bool, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "field_number", std::to_string(field->number()),
+                        "field_name", cpp_field_name(field)
+                    );
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_BYTES:
+                    printer.Print(
+                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_bytes, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "field_number", std::to_string(field->number()),
+                        "field_name", cpp_field_name(field)
+                    );
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_STRING:
+                    printer.Print(
+                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_string, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "field_number", std::to_string(field->number()),
+                        "field_name", cpp_field_name(field)
+                    );
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_ENUM:
+                    printer.Print("{\n");
+                    printer.Indent();
+
+                    printer.Print(
+                        "auto enum_value_to_name = rb_hash_new();\n",
+                        "field_name", cpp_field_name(field)
+                    );
+
+                    // 360 double block nosc0pe get good skrub
+                    {
+                        auto enum_descriptor = field->enum_type();
+                        for (int i = 0; i < enum_descriptor->value_count(); i++) {
+                            auto enum_value_descriptor = enum_descriptor->value(i);
+
+                            printer.Print(
+                                "rb_hash_aset(enum_value_to_name, LONG2FIX($enum_value$), rb_str_new2(\"$enum_name$\"));\n",
+                                "enum_value", std::to_string(enum_value_descriptor->number()),
+                                "enum_name", enum_value_descriptor->name()
+                            );
+                        }
+                    }
+
+                    printer.Print(
+                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_enum, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), enum_value_to_name));\n",
+                        "field_number", std::to_string(field->number()),
+                        "field_name", cpp_field_name(field)
+                    );
+
+                    printer.Outdent();
+                    printer.Print("}\n");
+
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_MESSAGE:
+                    printer.Print(
+                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_message, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $proxy_class$::rb_cls));\n",
+                        "field_number", std::to_string(field->number()),
+                        "field_name", cpp_field_name(field),
+                        "proxy_class", cpp_proto_message_wrapper_struct_name(field->message_type())
+                    );
+                    break;
+                case google::protobuf::FieldDescriptor::Type::TYPE_GROUP:
+                    printer.Print(
+                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_group, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $proxy_class$::rb_cls));\n",
+                        "field_number", std::to_string(field->number()),
+                        "field_name", cpp_field_name(field),
+                        "proxy_class", cpp_proto_message_wrapper_struct_name(field->message_type())
+                    );
+                    break;
+                default:
+                    printer.Print(
+                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_unknown, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "field_number", std::to_string(field->number()),
+                        "field_name", cpp_field_name(field)
+                    );
+                    break;
+            }
+        }
+
+        printer.Print(
+            "rb_cv_set(rb_cls, \"@@fields\", fields);\n"
+            "\n"
+            "return fields;\n"
+        );
+
+        printer.Outdent();
+        printer.Print("}\n");
     }
 }
