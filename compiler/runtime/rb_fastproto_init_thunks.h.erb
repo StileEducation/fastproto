@@ -1,0 +1,32 @@
+/*
+    This file gets templated out by rb_fastproto_init_thunks.h.erb just before compilation to look
+    in all .fastproto.h files for _Init_* methods. They all need to be called in the main
+    Init_fastproto_gen() function, which ruby calls when the dynlib is loaded. Templating them out
+    in this way means that the protobuf compiler can operate on a single proto at a time, so it
+    does not need to dirty files that have already been touched and so make builds much faster.
+*/
+
+<%
+    thunks = []
+    Dir.glob('**/*.fastproto.h').each do |header_file|
+        header_file_data = File.read(header_file)
+        header_file_data.scan(/@@rb_fastproto_init_thunk\(([^)]*)\)/).each do |match|
+            thunks << match.first
+        end
+    end
+%>
+
+// Define an extern for all of these symbols
+<% thunks.each do |thunk_symbol| %>
+<% thunk_symbol.split('::')[0...-1].each { |ns| %>namespace <%= ns %> { <% } %>
+    extern void <%= thunk_symbol.split('::').last %>();
+<% thunk_symbol.split('::')[0...-1].each { |ns| %>}<% } %>
+<% end %>
+
+// Now define an array with all the function pointers
+static void (*rb_fastproto_init_thunks[])() = {
+    <% thunks.each do |thunk_symbol| %><%= thunk_symbol%>,
+    <% end %>
+};
+
+static int rb_fastproto_init_thunks_len = <%= thunks.size %>;

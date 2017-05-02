@@ -34,10 +34,6 @@ namespace rb_fastproto {
         std::string error_msg;
         google::protobuf::compiler::CodeGeneratorResponse response;
 
-        // Before sending the response protobuf to our generator, add a file for our entrypoint
-        // so that our generator can make use of the insertion points in it.
-        add_entrypoint_files(response);
-
         if (google::protobuf::compiler::GenerateCode(request, *generator, &response, &error_msg)) {
             if (!response.SerializeToFileDescriptor(STDOUT_FILENO)) {
                 std::cerr << argv[0] << ": Error writing to stdout." << std::endl;

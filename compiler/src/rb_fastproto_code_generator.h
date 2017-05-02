@@ -37,11 +37,6 @@ namespace rb_fastproto {
             google::protobuf::io::Printer &printer
         ) const;
 
-        void write_entrypoint(
-            const google::protobuf::FileDescriptor* file,
-            google::protobuf::compiler::OutputDirectory *output_directory
-        ) const;
-
         void write_cpp_module_init(
             const google::protobuf::FileDescriptor* file,
             const std::vector<std::string> &class_names,
@@ -279,7 +274,6 @@ namespace rb_fastproto {
     std::string cpp_proto_method_wrapper_struct_name(const google::protobuf::MethodDescriptor* method);
     std::string cpp_proto_method_wrapper_struct_name_no_ns(const google::protobuf::MethodDescriptor* method);
     std::string cpp_field_name(const google::protobuf::FieldDescriptor* field);
-    void add_entrypoint_files(google::protobuf::compiler::CodeGeneratorResponse &response);
 }
 
 #endif
