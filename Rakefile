@@ -6,7 +6,7 @@ RSpec::Core::RakeTask.new(:spec => [:build_gen])
 FASTPROTO_COMPILER = 'compiler/rb_fastproto_compiler'
 
 # We are invoking make, so it takes care of appropriately caching outputs
-file FASTPROTO_COMPILER do
+file FASTPROTO_COMPILER => [Dir.glob('compiler/**/*.{cpp,h}'), 'compiler/Makefile'].flatten do
     cd 'compiler' do
         sh 'make', '-j', 'rb_fastproto_compiler'
     end
