@@ -282,4 +282,8 @@ describe ::Fastproto, "message" do
   it "should have proxy_class set correctly for message fields" do
     Featureful::A.fields["sub1"].proxy_class.should == Featureful::A::Sub
   end
+
+  it "should have fully_qualified_name" do
+    Featureful::A::Sub.fully_qualified_name.should == "featureful.A.Sub"
+  end
 end

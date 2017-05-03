@@ -64,6 +64,7 @@ namespace rb_fastproto {
             "static VALUE singleton_parse(VALUE self, VALUE buffer);\n"
             "static VALUE singleton_field_for_name(VALUE self, VALUE name);\n"
             "static VALUE singleton_fields(VALUE self);\n"
+            "static VALUE singleton_fully_qualified_name(VALUE self);\n"
             "\n"
             "VALUE to_proto_obj($cpp_proto_class$* cpp_proto);\n"
             "VALUE from_proto_obj(const $cpp_proto_class$& cpp_proto);\n",
@@ -177,6 +178,7 @@ namespace rb_fastproto {
         write_cpp_message_struct_singleton_parse(file, message_type, class_name, printer);
         write_cpp_message_struct_singleton_field_for_name(file, message_type, class_name, printer);
         write_cpp_message_struct_singleton_fields(file, message_type, class_name, printer);
+        write_cpp_message_struct_singleton_fully_qualified_name(file, message_type, class_name, printer);
 
         // For some silly reason we need to initialized its static members at translation-unit scope?
         printer.Print("VALUE $class_name$::rb_cls = Qnil;\n", "class_name", class_name);
@@ -265,9 +267,11 @@ namespace rb_fastproto {
             "rb_define_alias(rb_cls, \"==\", \"equal_to\");\n"
             "rb_define_method(rb_cls, \"inspect\", RUBY_METHOD_FUNC(&inspect), 0);\n"
             "rb_define_method(rb_cls, \"fields\", RUBY_METHOD_FUNC(&singleton_fields), 0);\n"
+            "rb_define_method(rb_cls, \"fully_qualified_name\", RUBY_METHOD_FUNC(&singleton_fully_qualified_name), 0);\n"
             "rb_define_singleton_method(rb_cls, \"parse\", RUBY_METHOD_FUNC(&singleton_parse), 1);\n"
             "rb_define_singleton_method(rb_cls, \"fields\", RUBY_METHOD_FUNC(&singleton_fields), 0);\n"
             "rb_define_singleton_method(rb_cls, \"field_for_name\", RUBY_METHOD_FUNC(&singleton_field_for_name), 1);\n"
+            "rb_define_singleton_method(rb_cls, \"fully_qualified_name\", RUBY_METHOD_FUNC(&singleton_fully_qualified_name), 0);\n"
             "rb_cv_set(rb_cls, \"@@fields\", Qnil);\n"
             "\n",
             "ruby_namespace", message_type->containing_type() == nullptr ?
@@ -1340,6 +1344,21 @@ namespace rb_fastproto {
 
         printer.Outdent();
         printer.Print("}\n\n");
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_message_struct_singleton_fully_qualified_name(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print(
+            "VALUE $class_name$::singleton_fully_qualified_name(VALUE self) {\n"
+            "  return rb_str_new2(\"$message_type_full_name$\");\n"
+            "}\n",
+            "class_name", class_name,
+            "message_type_full_name", message_type->full_name()
+        );
     }
 
     void RBFastProtoCodeGenerator::write_cpp_message_struct_singleton_fields(

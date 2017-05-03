@@ -165,6 +165,12 @@ namespace rb_fastproto {
             const std::string &class_name,
             google::protobuf::io::Printer &printer
         ) const;
+        void write_cpp_message_struct_singleton_fully_qualified_name(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::Descriptor* message_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
 
         // service code
 
