@@ -5,7 +5,7 @@ all: rb_fastproto_compiler
 XXD ?= xxd
 
 CFLAGS += -Wno-deprecated-declarations -I/usr/local/include
-CXXFLAGS += $(CFLAGS) -std=c++14
+CXXFLAGS += $(CFLAGS) -std=c++11
 LDFLAGS += -L/usr/local/lib
 XXDFLAGS ?=
 

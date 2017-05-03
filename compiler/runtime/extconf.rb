@@ -2,7 +2,10 @@ require 'mkmf'
 
 $INCFLAGS << ' -I/usr/local/include'
 $LIBPATH.push('/usr/local/lib')
-$CXXFLAGS << ' --std=c++14 -Wno-shorten-64-to-32 -Wno-sign-compare -Wno-deprecated-declarations -O3'
+$CXXFLAGS << ' --std=c++11 -Wno-shorten-64-to-32 -Wno-sign-compare -Wno-deprecated-declarations -O3'
+
+$warnflags.gsub!('-Wdeclaration-after-statement', '')
+$warnflags.gsub!('-Wimplicit-function-declaration', '')
 
 dir_config('protobuf')
 
