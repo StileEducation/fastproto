@@ -25,6 +25,9 @@ namespace rb_fastproto {
         boost::scoped_ptr<google::protobuf::io::ZeroCopyOutputStream> header_output(output_directory->Open(output_header_file_name));
         google::protobuf::io::Printer header_printer(header_output.get(), '$');
 
+        auto output_rb_file_name = rb_path_for_proto(file);
+        boost::scoped_ptr<google::protobuf::io::ZeroCopyOutputStream> rb_output(output_directory->Open(output_rb_file_name));
+
         write_header(file, header_printer);
         write_cpp(file, cpp_printer);
 

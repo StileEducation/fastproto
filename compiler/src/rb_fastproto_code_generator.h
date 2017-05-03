@@ -265,6 +265,7 @@ namespace rb_fastproto {
 
     std::string header_name_as_identifier(const google::protobuf::FileDescriptor* proto_file);
     std::string header_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
+    std::string rb_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
     std::string cpp_proto_header_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
     std::string cpp_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
     std::string cpp_proto_class_name(const google::protobuf::Descriptor* message_type);
