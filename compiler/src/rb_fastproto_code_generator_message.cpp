@@ -268,6 +268,7 @@ namespace rb_fastproto {
             "rb_define_method(rb_cls, \"inspect\", RUBY_METHOD_FUNC(&inspect), 0);\n"
             "rb_define_method(rb_cls, \"fields\", RUBY_METHOD_FUNC(&singleton_fields), 0);\n"
             "rb_define_method(rb_cls, \"fully_qualified_name\", RUBY_METHOD_FUNC(&singleton_fully_qualified_name), 0);\n"
+            "rb_define_method(rb_cls, \"field_for_name\", RUBY_METHOD_FUNC(&singleton_field_for_name), 1);\n"
             "rb_define_singleton_method(rb_cls, \"parse\", RUBY_METHOD_FUNC(&singleton_parse), 1);\n"
             "rb_define_singleton_method(rb_cls, \"fields\", RUBY_METHOD_FUNC(&singleton_fields), 0);\n"
             "rb_define_singleton_method(rb_cls, \"field_for_name\", RUBY_METHOD_FUNC(&singleton_field_for_name), 1);\n"
@@ -286,10 +287,11 @@ namespace rb_fastproto {
             auto field = message_type->field(i);
 
             printer.Print(
-                "rb_define_method(rb_cls, \"$field_name$\", RUBY_METHOD_FUNC(&get_$field_name$), 0);\n"
-                "rb_define_method(rb_cls, \"$field_name$=\", RUBY_METHOD_FUNC(&set_$field_name$), 1);\n"
-                "rb_define_method(rb_cls, \"has_$field_name$?\", RUBY_METHOD_FUNC(&has_$field_name$), 0);\n",
-                "field_name", cpp_field_name(field)
+                "rb_define_method(rb_cls, \"$rb_field_name$\", RUBY_METHOD_FUNC(&get_$cpp_field_name$), 0);\n"
+                "rb_define_method(rb_cls, \"$rb_field_name$=\", RUBY_METHOD_FUNC(&set_$cpp_field_name$), 1);\n"
+                "rb_define_method(rb_cls, \"has_$rb_field_name$?\", RUBY_METHOD_FUNC(&has_$cpp_field_name$), 0);\n",
+                "cpp_field_name", cpp_field_name(field),
+                "rb_field_name", field->name()
             );
         }
 
@@ -1262,7 +1264,7 @@ namespace rb_fastproto {
         printer.Print("std::string str(\"#<$rb_class_name$\");\n", "rb_class_name", ruby_proto_message_class_name(message_type));
         for (int i = 0; i < message_type->field_count(); i++) {
             auto field = message_type->field(i);
-            printer.Print("str += \" $field_name$=\";\n", "field_name", field->lowercase_name());
+            printer.Print("str += \" $field_name$=\";\n", "field_name", field->name());
 
             if (field->is_optional()) {
                 printer.Print(
@@ -1316,31 +1318,42 @@ namespace rb_fastproto {
         const std::string &class_name,
         google::protobuf::io::Printer &printer
     ) const {
-        printer.Print("VALUE $class_name$::singleton_field_for_name(VALUE self, VALUE name) {\n", "class_name", class_name);
+        printer.Print(
+            "VALUE $class_name$::singleton_field_for_name(VALUE self, VALUE name) {\n",
+            "class_name", class_name
+        );
         printer.Indent();
 
         printer.Print(
-            "std::string str(rb_id2name(SYM2ID(rb_to_symbol(name))));\n"
-            "\n"
+            "std::string str;\n"
+            "switch (TYPE(name)) {\n"
+            "  case T_STRING: str = StringValueCStr(name); break;\n"
+            "  case T_SYMBOL: str = rb_id2name(SYM2ID(name)); break;\n"
+            "  default: rb_raise(rb_eTypeError, \"invalid type for name parameter\"); return Qnil;\n"
+            "}\n\n"
+        );
+
+        printer.Print(
+            "auto fields = rb_funcall(rb_cls, rb_intern(\"fields\"), 0);\n\n"
         );
 
         for (int i = 0; i < message_type->field_count(); i++) {
             auto field = message_type->field(i);
 
+            std::string field_name_lower(field->name());
+            boost::to_lower(field_name_lower);
+
             printer.Print(
-                "if (str == \"$lowercase_name$\" || str == \"$camelcase_name$\") {\n"
-                "  return rb_funcall(cls_fastproto_field, rb_intern(\"new\"), 1, INT2FIX($number$));\n"
-                "}\n"
-                "\n",
-                "lowercase_name", field->lowercase_name(),
-                "camelcase_name", field->camelcase_name(),
-                "number", std::to_string(field->number())
+                "if (str == \"$field_name$\" || str == \"$field_name_lower$\") {\n"
+                "  return rb_hash_aref(fields, LONG2FIX($field_number$));\n"
+                "}\n\n",
+                "field_name", std::string(field->name()),
+                "field_name_lower", field_name_lower,
+                "field_number", std::to_string(field->number())
             );
         }
 
-        printer.Print(
-            "return Qnil;\n"
-        );
+        printer.Print("return Qnil;\n");
 
         printer.Outdent();
         printer.Print("}\n\n");
@@ -1395,48 +1408,51 @@ namespace rb_fastproto {
                 case google::protobuf::FieldDescriptor::Type::TYPE_UINT64:
                 case google::protobuf::FieldDescriptor::Type::TYPE_FIXED64:
                     printer.Print(
-                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_integer, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "rb_hash_aset(fields, LONG2FIX($field_number$), rb_funcall(cls_fastproto_field_integer, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $field_repeated$));\n",
                         "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
+                        "field_name", field->name(),
+                        "field_repeated", field->is_repeated() ? "Qtrue" : "Qfalse"
                     );
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_FLOAT:
                 case google::protobuf::FieldDescriptor::Type::TYPE_DOUBLE:
                     printer.Print(
-                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_float, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "rb_hash_aset(fields, LONG2FIX($field_number$), rb_funcall(cls_fastproto_field_float, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $field_repeated$));\n",
                         "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
+                        "field_name", field->name(),
+                        "field_repeated", field->is_repeated() ? "Qtrue" : "Qfalse"
                     );
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_BOOL:
                     printer.Print(
-                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_bool, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "rb_hash_aset(fields, LONG2FIX($field_number$), rb_funcall(cls_fastproto_field_bool, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $field_repeated$));\n",
                         "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
+                        "field_name", field->name(),
+                        "field_repeated", field->is_repeated() ? "Qtrue" : "Qfalse"
                     );
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_BYTES:
                     printer.Print(
-                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_bytes, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "rb_hash_aset(fields, LONG2FIX($field_number$), rb_funcall(cls_fastproto_field_bytes, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $field_repeated$));\n",
                         "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
+                        "field_name", field->name(),
+                        "field_repeated", field->is_repeated() ? "Qtrue" : "Qfalse"
                     );
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_STRING:
                     printer.Print(
-                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_string, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "rb_hash_aset(fields, LONG2FIX($field_number$), rb_funcall(cls_fastproto_field_string, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $field_repeated$));\n",
                         "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
+                        "field_name", field->name(),
+                        "field_repeated", field->is_repeated() ? "Qtrue" : "Qfalse"
                     );
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_ENUM:
                     printer.Print("{\n");
                     printer.Indent();
 
-                    printer.Print(
-                        "auto enum_value_to_name = rb_hash_new();\n",
-                        "field_name", cpp_field_name(field)
-                    );
+                    printer.Print("auto enum_value_to_name = rb_hash_new();\n");
+                    printer.Print("auto enum_name_to_value = rb_hash_new();\n");
 
                     // 360 double block nosc0pe get good skrub
                     {
@@ -1449,13 +1465,20 @@ namespace rb_fastproto {
                                 "enum_value", std::to_string(enum_value_descriptor->number()),
                                 "enum_name", enum_value_descriptor->name()
                             );
+
+                            printer.Print(
+                                "rb_hash_aset(enum_name_to_value, rb_str_new2(\"$enum_name$\"), LONG2FIX($enum_value$));\n",
+                                "enum_value", std::to_string(enum_value_descriptor->number()),
+                                "enum_name", enum_value_descriptor->name()
+                            );
                         }
                     }
 
                     printer.Print(
-                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_enum, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), enum_value_to_name));\n",
+                        "rb_hash_aset(fields, LONG2FIX($field_number$), rb_funcall(cls_fastproto_field_enum, rb_intern(\"new\"), 5, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $field_repeated$, enum_value_to_name, enum_name_to_value));\n",
                         "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
+                        "field_name", field->name(),
+                        "field_repeated", field->is_repeated() ? "Qtrue" : "Qfalse"
                     );
 
                     printer.Outdent();
@@ -1464,25 +1487,28 @@ namespace rb_fastproto {
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_MESSAGE:
                     printer.Print(
-                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_message, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $proxy_class$::rb_cls));\n",
+                        "rb_hash_aset(fields, LONG2FIX($field_number$), rb_funcall(cls_fastproto_field_message, rb_intern(\"new\"), 4, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $field_repeated$, $proxy_class$::rb_cls));\n",
                         "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field),
+                        "field_name", field->name(),
+                        "field_repeated", field->is_repeated() ? "Qtrue" : "Qfalse",
                         "proxy_class", cpp_proto_message_wrapper_struct_name(field->message_type())
                     );
                     break;
                 case google::protobuf::FieldDescriptor::Type::TYPE_GROUP:
                     printer.Print(
-                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_group, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $proxy_class$::rb_cls));\n",
+                        "rb_hash_aset(fields, LONG2FIX($field_number$), rb_funcall(cls_fastproto_field_group, rb_intern(\"new\"), 4, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $field_repeated$, $proxy_class$::rb_cls));\n",
                         "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field),
+                        "field_name", field->name(),
+                        "field_repeated", field->is_repeated() ? "Qtrue" : "Qfalse",
                         "proxy_class", cpp_proto_message_wrapper_struct_name(field->message_type())
                     );
                     break;
                 default:
                     printer.Print(
-                        "rb_hash_aset(fields, rb_str_new2(\"$field_name$\"), rb_funcall(cls_fastproto_field_unknown, rb_intern(\"new\"), 2, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\")));\n",
+                        "rb_hash_aset(fields, LONG2FIX($field_number$), rb_funcall(cls_fastproto_field_unknown, rb_intern(\"new\"), 3, LONG2FIX($field_number$), rb_str_new2(\"$field_name$\"), $field_repeated$));\n",
                         "field_number", std::to_string(field->number()),
-                        "field_name", cpp_field_name(field)
+                        "field_name", field->name(),
+                        "field_repeated", field->is_repeated() ? "Qtrue" : "Qfalse"
                     );
                     break;
             }

@@ -80,27 +80,25 @@ namespace rb_fastproto_gen {
         cls_fastproto_method = rb_define_class_under(rb_fastproto_module, "Method", rb_cObject);
     }
 
-    static VALUE cls_fastproto_field_initialize(VALUE self, VALUE tag, VALUE name) {
+    static VALUE cls_fastproto_field_initialize(VALUE self, VALUE tag, VALUE name, VALUE repeated) {
         Check_Type(tag, T_FIXNUM);
         Check_Type(name, T_STRING);
         rb_ivar_set(self, rb_intern("@tag"), tag);
         rb_ivar_set(self, rb_intern("@name"), name);
+        rb_ivar_set(self, rb_intern("@repeated"), repeated);
         return self;
     }
 
-    static VALUE cls_fastproto_field_tag(VALUE self) {
-        return rb_ivar_get(self, rb_intern("@tag"));
-    }
-
-    static VALUE cls_fastproto_field_name(VALUE self) {
-        return rb_ivar_get(self, rb_intern("@name"));
+    static VALUE cls_fastproto_field_repeated(VALUE self) {
+        return rb_ivar_get(self, rb_intern("@repeated"));
     }
 
     static void define_field_class() {
         cls_fastproto_field = rb_define_class_under(rb_fastproto_module, "Field", rb_cObject);
-        rb_define_method(cls_fastproto_field, "initialize", RUBY_METHOD_FUNC(&cls_fastproto_field_initialize), 2);
-        rb_define_method(cls_fastproto_field, "tag", RUBY_METHOD_FUNC(&cls_fastproto_field_tag), 0);
-        rb_define_method(cls_fastproto_field, "name", RUBY_METHOD_FUNC(&cls_fastproto_field_name), 0);
+        rb_define_method(cls_fastproto_field, "initialize", RUBY_METHOD_FUNC(&cls_fastproto_field_initialize), 3);
+        rb_define_attr(cls_fastproto_field, "tag", 1, 0);
+        rb_define_attr(cls_fastproto_field, "name", 1, 0);
+        rb_define_method(cls_fastproto_field, "repeated?", RUBY_METHOD_FUNC(&cls_fastproto_field_repeated), 0);
     }
 
     static void define_field_integer_class() {
@@ -123,35 +121,38 @@ namespace rb_fastproto_gen {
         cls_fastproto_field_string = rb_define_class_under(rb_fastproto_module, "FieldString", cls_fastproto_field);
     }
 
-    static VALUE cls_fastproto_field_enum_initialize(VALUE self, VALUE tag, VALUE name, VALUE value_to_name) {
+    static VALUE cls_fastproto_field_enum_initialize(VALUE self, VALUE tag, VALUE name, VALUE repeated, VALUE value_to_name, VALUE name_to_value) {
         Check_Type(tag, T_FIXNUM);
         Check_Type(name, T_STRING);
         Check_Type(value_to_name, T_HASH);
-        VALUE args[] = { tag, name };
-        rb_call_super(2, args);
+        Check_Type(name_to_value, T_HASH);
+        VALUE args[] = { tag, name, repeated };
+        rb_call_super(3, args);
         rb_ivar_set(self, rb_intern("@value_to_name"), value_to_name);
+        rb_ivar_set(self, rb_intern("@name_to_value"), name_to_value);
         return self;
     }
 
     static void define_field_enum_class() {
         cls_fastproto_field_enum = rb_define_class_under(rb_fastproto_module, "FieldEnum", cls_fastproto_field);
-        rb_define_method(cls_fastproto_field_enum, "initialize", RUBY_METHOD_FUNC(&cls_fastproto_field_enum_initialize), 3);
+        rb_define_method(cls_fastproto_field_enum, "initialize", RUBY_METHOD_FUNC(&cls_fastproto_field_enum_initialize), 5);
         rb_define_attr(cls_fastproto_field_enum, "value_to_name", 1, 0);
+        rb_define_attr(cls_fastproto_field_enum, "name_to_value", 1, 0);
     }
 
-    static VALUE cls_fastproto_field_aggregate_initialize(VALUE self, VALUE tag, VALUE name, VALUE proxy_class) {
+    static VALUE cls_fastproto_field_aggregate_initialize(VALUE self, VALUE tag, VALUE name, VALUE repeated, VALUE proxy_class) {
         Check_Type(tag, T_FIXNUM);
         Check_Type(name, T_STRING);
         Check_Type(proxy_class, T_CLASS);
-        VALUE args[] = { tag, name };
-        rb_call_super(2, args);
+        VALUE args[] = { tag, name, repeated };
+        rb_call_super(3, args);
         rb_ivar_set(self, rb_intern("@proxy_class"), proxy_class);
         return self;
     }
 
     static void define_field_aggregate_class() {
         cls_fastproto_field_aggregate = rb_define_class_under(rb_fastproto_module, "FieldAggregate", cls_fastproto_field);
-        rb_define_method(cls_fastproto_field_aggregate, "initialize", RUBY_METHOD_FUNC(&cls_fastproto_field_aggregate_initialize), 3);
+        rb_define_method(cls_fastproto_field_aggregate, "initialize", RUBY_METHOD_FUNC(&cls_fastproto_field_aggregate_initialize), 4);
         rb_define_attr(cls_fastproto_field_aggregate, "proxy_class", 1, 0);
     }
 
