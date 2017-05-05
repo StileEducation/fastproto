@@ -88,6 +88,14 @@ namespace rb_fastproto {
         return cpp_proto_ns;
     }
 
+    std::string ruby_proto_enum_class_name_no_ns(const google::protobuf::EnumDescriptor* enum_type) {
+        if (enum_type->containing_type() != nullptr) {
+            return ruby_proto_message_class_name_no_ns(enum_type->containing_type()) + "_" + enum_type->name();
+        } else {
+            return std::string(enum_type->name());
+        }
+    }
+
     std::string cpp_proto_enum_wrapper_struct_name(const google::protobuf::EnumDescriptor* enum_type) {
         std::string cpp_proto_ns("rb_fastproto_gen::");
 
@@ -132,6 +140,10 @@ namespace rb_fastproto {
             message_type_chain.pop();
         }
         return cpp_proto_ns;
+    }
+
+    std::string ruby_proto_message_class_name_no_ns(const google::protobuf::Descriptor* message_type) {
+        return message_type->name();
     }
 
     std::string cpp_proto_message_wrapper_struct_name(const google::protobuf::Descriptor* message_type) {

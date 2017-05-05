@@ -106,7 +106,7 @@ namespace rb_fastproto {
             "rb_define_method(rb_cls, \"initialize\", RUBY_METHOD_FUNC(&initialize), 0);\n"
             "rb_define_singleton_method(rb_cls, \"fully_qualified_name\", RUBY_METHOD_FUNC(&fully_qualified_name), 0);\n\n",
             "class_name", class_name,
-            "ruby_class_name", enum_type->name(),
+            "ruby_class_name", ruby_proto_enum_class_name_no_ns(enum_type),
             "enum_full_name", enum_type->full_name()
         );
 

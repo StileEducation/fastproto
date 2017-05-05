@@ -310,7 +310,9 @@ namespace rb_fastproto {
     std::string cpp_proto_class_name(const google::protobuf::Descriptor* message_type);
     std::string cpp_proto_descriptor_name(const google::protobuf::Descriptor* message_type);
     std::string ruby_proto_enum_class_name(const google::protobuf::EnumDescriptor* message_type);
+    std::string ruby_proto_enum_class_name_no_ns(const google::protobuf::EnumDescriptor* message_type);
     std::string ruby_proto_message_class_name(const google::protobuf::Descriptor* message_type);
+    std::string ruby_proto_message_class_name_no_ns(const google::protobuf::Descriptor* message_type);
     std::string ruby_proto_service_class_name(const google::protobuf::ServiceDescriptor* service);
     std::string ruby_proto_method_class_name(const google::protobuf::MethodDescriptor* method);
     std::vector<std::string> rubyised_namespace_els(const google::protobuf::FileDescriptor* file);
