@@ -15,6 +15,8 @@ namespace rb_fastproto {
         google::protobuf::io::Printer &printer
     ) const {
         auto class_name = cpp_proto_message_wrapper_struct_name_no_ns(message_type);
+
+        printer.Print("// message $message_name$\n", "message_name", message_type->full_name());
         printer.Print("struct $class_name$ {\n", "class_name", class_name);
         printer.Indent();
 

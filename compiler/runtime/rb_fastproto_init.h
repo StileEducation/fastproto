@@ -11,6 +11,7 @@ namespace rb_fastproto_gen {
     extern VALUE rb_fastproto_module;
 
     // The base classes
+    extern VALUE cls_fastproto_enum;
     extern VALUE cls_fastproto_message;
     extern VALUE cls_fastproto_service;
     extern VALUE cls_fastproto_method;

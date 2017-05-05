@@ -4,6 +4,7 @@
 
 namespace rb_fastproto_gen {
     VALUE rb_fastproto_module = Qnil;
+    VALUE cls_fastproto_enum = Qnil;
     VALUE cls_fastproto_message = Qnil;
     VALUE cls_fastproto_service = Qnil;
     VALUE cls_fastproto_method = Qnil;
@@ -19,6 +20,7 @@ namespace rb_fastproto_gen {
     VALUE cls_fastproto_field_group = Qnil;
     VALUE cls_fastproto_field_unknown = Qnil;
 
+    static void define_enum_class();
     static void define_message_class();
     static void define_service_class();
     static void define_method_class();
@@ -39,6 +41,7 @@ extern "C" void Init_fastproto_gen(void) {
     // Define our toplevel module
     rb_fastproto_gen::rb_fastproto_module = rb_define_module("Fastproto");
 
+    rb_fastproto_gen::define_enum_class();
     rb_fastproto_gen::define_message_class();
     rb_fastproto_gen::define_service_class();
     rb_fastproto_gen::define_method_class();
@@ -64,6 +67,10 @@ namespace rb_fastproto_gen {
     static VALUE cls_fastproto_message_find_by_fully_qualified_name(VALUE self, VALUE name) {
         Check_Type(name, T_STRING);
         return rb_funcall(rb_cv_get(self, "@@message_classes"), rb_intern("[]"), 1, name);
+    }
+
+    static void define_enum_class() {
+        cls_fastproto_enum = rb_define_class_under(rb_fastproto_module, "Enum", rb_cObject);
     }
 
     static void define_message_class() {

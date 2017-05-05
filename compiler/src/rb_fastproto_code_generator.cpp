@@ -64,11 +64,21 @@ namespace rb_fastproto {
             printer.Indent();
         }
 
+        for (int i = 0; i < file->enum_type_count(); i++) {
+            auto enum_type = file->enum_type(i);
+            write_header_enum_struct_definition(file, enum_type, printer);
+        }
+
         // We need to export our classes in the header file, so that other messages can
         // serialize this one as a part of their operation.
         for (int i = 0; i < file->message_type_count(); i++) {
             auto message_type = file->message_type(i);
             write_header_message_struct_definition(file, message_type, printer);
+
+            for (int j = 0; j < message_type->enum_type_count(); j++) {
+                auto enum_type = message_type->enum_type(j);
+                write_header_enum_struct_definition(file, enum_type, printer);
+            }
         }
 
         // Let's put services in this header as well. Because why not. Computers.
@@ -159,9 +169,19 @@ namespace rb_fastproto {
         // Collect the class names we generate.
         std::vector<std::string> class_names;
 
+        for (int i = 0; i < file->enum_type_count(); i++) {
+            auto enum_type = file->enum_type(i);
+            class_names.push_back(write_cpp_enum_struct(file, enum_type, printer));
+        }
+
         for (int i = 0; i < file->message_type_count(); i++) {
             auto message_type = file->message_type(i);
             class_names.push_back(write_cpp_message_struct(file, message_type, printer));
+
+            for (int j = 0; j < message_type->enum_type_count(); j++) {
+                auto enum_type = message_type->enum_type(j);
+                class_names.push_back(write_cpp_enum_struct(file, enum_type, printer));
+            }
         }
 
         for (int i = 0; i < file->service_count(); i++) {

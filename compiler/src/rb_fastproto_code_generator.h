@@ -43,6 +43,45 @@ namespace rb_fastproto {
             google::protobuf::io::Printer &printer
         ) const;
 
+        // enum code
+
+        void write_header_enum_struct_definition(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::EnumDescriptor* enum_type,
+            google::protobuf::io::Printer &printer
+        ) const;
+
+        std::string write_cpp_enum_struct(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::EnumDescriptor* enum_type,
+            google::protobuf::io::Printer &printer
+        ) const;
+
+        void write_cpp_enum_struct_constructor(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::EnumDescriptor* enum_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_enum_struct_static_initializer(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::EnumDescriptor* enum_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_enum_struct_allocators(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::EnumDescriptor* enum_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+        void write_cpp_enum_struct_name(
+            const google::protobuf::FileDescriptor* file,
+            const google::protobuf::EnumDescriptor* enum_type,
+            const std::string &class_name,
+            google::protobuf::io::Printer &printer
+        ) const;
+
         // message code
 
         void write_header_message_struct_definition(
@@ -270,10 +309,13 @@ namespace rb_fastproto {
     std::string cpp_path_for_proto(const google::protobuf::FileDescriptor* proto_file);
     std::string cpp_proto_class_name(const google::protobuf::Descriptor* message_type);
     std::string cpp_proto_descriptor_name(const google::protobuf::Descriptor* message_type);
+    std::string ruby_proto_enum_class_name(const google::protobuf::EnumDescriptor* message_type);
     std::string ruby_proto_message_class_name(const google::protobuf::Descriptor* message_type);
     std::string ruby_proto_service_class_name(const google::protobuf::ServiceDescriptor* service);
     std::string ruby_proto_method_class_name(const google::protobuf::MethodDescriptor* method);
     std::vector<std::string> rubyised_namespace_els(const google::protobuf::FileDescriptor* file);
+    std::string cpp_proto_enum_wrapper_struct_name(const google::protobuf::EnumDescriptor* message_type);
+    std::string cpp_proto_enum_wrapper_struct_name_no_ns(const google::protobuf::EnumDescriptor* message_type);
     std::string cpp_proto_message_wrapper_struct_name(const google::protobuf::Descriptor* message_type);
     std::string cpp_proto_message_wrapper_struct_name_no_ns(const google::protobuf::Descriptor* message_type);
     std::string cpp_proto_service_wrapper_struct_name(const google::protobuf::ServiceDescriptor* service);

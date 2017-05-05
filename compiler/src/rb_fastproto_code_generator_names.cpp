@@ -69,6 +69,56 @@ namespace rb_fastproto {
         return boost::str(boost::format("%s_descriptor_") % cpp_proto_class_name(message_type));
     }
 
+    std::string ruby_proto_enum_class_name(const google::protobuf::EnumDescriptor* enum_type) {
+        auto cpp_proto_ns = boost::join(rubyised_namespace_els(enum_type->file()), "::");
+
+        std::stack<std::string> enum_type_chain;
+
+        enum_type_chain.push(enum_type->name());
+
+        for (auto cur_type = enum_type->containing_type(); cur_type != nullptr; cur_type = cur_type->containing_type()) {
+            enum_type_chain.push(cur_type->name());
+        }
+
+        while (!enum_type_chain.empty()) {
+            cpp_proto_ns += (std::string("::") + enum_type_chain.top());
+            enum_type_chain.pop();
+        }
+
+        return cpp_proto_ns;
+    }
+
+    std::string cpp_proto_enum_wrapper_struct_name(const google::protobuf::EnumDescriptor* enum_type) {
+        std::string cpp_proto_ns("rb_fastproto_gen::");
+
+        cpp_proto_ns += boost::join(rubyised_namespace_els(enum_type->file()), "::");
+
+        std::stack<std::string> enum_type_chain;
+
+        for (auto cur_type = enum_type->containing_type(); cur_type != nullptr; cur_type = cur_type->containing_type()) {
+            enum_type_chain.push(cur_type->name());
+        }
+
+        while (!enum_type_chain.empty()) {
+            cpp_proto_ns += (std::string("::RB") + enum_type_chain.top());
+            enum_type_chain.pop();
+        }
+
+        if (enum_type->containing_type() != nullptr) {
+            return cpp_proto_ns + "_" + enum_type->name();
+        } else {
+            return cpp_proto_ns + "::RB" + enum_type->name();
+        }
+    }
+
+    std::string cpp_proto_enum_wrapper_struct_name_no_ns(const google::protobuf::EnumDescriptor* enum_type) {
+        if (enum_type->containing_type() != nullptr) {
+            return cpp_proto_message_wrapper_struct_name_no_ns(enum_type->containing_type()) + "_" + enum_type->name();
+        } else {
+            return std::string("RB") + enum_type->name();
+        }
+    }
+
     std::string ruby_proto_message_class_name(const google::protobuf::Descriptor* message_type) {
         auto cpp_proto_ns = boost::join(rubyised_namespace_els(message_type->file()), "::");
         // Use a std::stack to push the parents up the chain, then append them to the namespace, most senior first
