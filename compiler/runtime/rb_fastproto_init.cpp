@@ -64,19 +64,46 @@ extern "C" void Init_fastproto_gen(void) {
 }
 
 namespace rb_fastproto_gen {
+    static void define_enum_class() {
+        cls_fastproto_enum = rb_define_class_under(rb_fastproto_module, "Enum", rb_cObject);
+    }
+
     static VALUE cls_fastproto_message_find_by_fully_qualified_name(VALUE self, VALUE name) {
         Check_Type(name, T_STRING);
         return rb_funcall(rb_cv_get(self, "@@message_classes"), rb_intern("[]"), 1, name);
     }
 
-    static void define_enum_class() {
-        cls_fastproto_enum = rb_define_class_under(rb_fastproto_module, "Enum", rb_cObject);
+    static VALUE cls_fastproto_message_to_hash(VALUE self, VALUE msg) {
+        if (msg == Qnil) {
+          return Qnil;
+        }
+
+        if (RB_TYPE_P(msg, T_STRING)) {
+          return rb_funcall(msg, rb_intern("dup"), 0);
+        }
+
+        if (RB_TYPE_P(msg, T_ARRAY)) {
+          auto ary = rb_ary_new();
+
+          for (int i = 0; i < RARRAY_LEN(msg); i++) {
+            rb_ary_push(ary, rb_funcall(self, rb_intern("to_hash"), 1, rb_ary_entry(msg, i)));
+          }
+
+          return ary;
+        }
+
+        if (rb_respond_to(msg, rb_intern("to_hash"))) {
+          return rb_funcall(msg, rb_intern("to_hash"), 0);
+        }
+
+        return msg;
     }
 
     static void define_message_class() {
         cls_fastproto_message = rb_define_class_under(rb_fastproto_module, "Message", rb_cObject);
         rb_cv_set(cls_fastproto_message, "@@message_classes", rb_hash_new());
         rb_define_singleton_method(cls_fastproto_message, "find_by_fully_qualified_name", RUBY_METHOD_FUNC(&cls_fastproto_message_find_by_fully_qualified_name), 1);
+        rb_define_singleton_method(cls_fastproto_message, "to_hash", RUBY_METHOD_FUNC(&cls_fastproto_message_to_hash), 1);
     }
 
     static void define_service_class() {

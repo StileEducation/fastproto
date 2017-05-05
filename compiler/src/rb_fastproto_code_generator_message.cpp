@@ -63,6 +63,7 @@ namespace rb_fastproto {
             "static VALUE notify_default_changed(VALUE self, VALUE sender, VALUE notify_tag);\n"
             "static VALUE equal_to(VALUE self, VALUE other);\n"
             "static VALUE inspect(VALUE self);\n"
+            "static VALUE to_hash(VALUE self);\n"
             "static VALUE singleton_parse(VALUE self, VALUE buffer);\n"
             "static VALUE singleton_field_for_name(VALUE self, VALUE name);\n"
             "static VALUE singleton_fields(VALUE self);\n"
@@ -175,6 +176,8 @@ namespace rb_fastproto {
         write_cpp_message_struct_equality(file, message_type, class_name, printer);
         // inspect method
         write_cpp_message_struct_inspect(file, message_type, class_name, printer);
+        // to_hash method
+        write_cpp_message_struct_to_hash(file, message_type, class_name, printer);
 
         // Singleton methods
         write_cpp_message_struct_singleton_parse(file, message_type, class_name, printer);
@@ -268,6 +271,7 @@ namespace rb_fastproto {
             "rb_define_alias(rb_cls, \"eql?\", \"equal_to\");\n"
             "rb_define_alias(rb_cls, \"==\", \"equal_to\");\n"
             "rb_define_method(rb_cls, \"inspect\", RUBY_METHOD_FUNC(&inspect), 0);\n"
+            "rb_define_method(rb_cls, \"to_hash\", RUBY_METHOD_FUNC(&to_hash), 0);\n"
             "rb_define_method(rb_cls, \"fields\", RUBY_METHOD_FUNC(&singleton_fields), 0);\n"
             "rb_define_method(rb_cls, \"fully_qualified_name\", RUBY_METHOD_FUNC(&singleton_fully_qualified_name), 0);\n"
             "rb_define_method(rb_cls, \"field_for_name\", RUBY_METHOD_FUNC(&singleton_field_for_name), 1);\n"
@@ -1293,6 +1297,51 @@ namespace rb_fastproto {
         printer.Print("str += \">\";\n");
 
         printer.Print("return rb_str_new2(str.c_str());\n");
+
+        printer.Outdent();
+        printer.Print("}\n\n");
+    }
+
+    void RBFastProtoCodeGenerator::write_cpp_message_struct_to_hash(
+        const google::protobuf::FileDescriptor* file,
+        const google::protobuf::Descriptor* message_type,
+        const std::string &class_name,
+        google::protobuf::io::Printer &printer
+    ) const {
+        printer.Print("VALUE $class_name$::to_hash(VALUE self) {\n", "class_name", class_name);
+        printer.Indent();
+
+        printer.Print(
+            "$class_name$* cpp_self;\n"
+            "Data_Get_Struct(self, $class_name$, cpp_self);\n\n",
+            "class_name", class_name
+        );
+
+        printer.Print("auto hash = rb_hash_new();\n\n");
+
+        for (int i = 0; i < message_type->field_count(); i++) {
+            auto field = message_type->field(i);
+
+            if (field->is_optional()) {
+                printer.Print(
+                    "if (cpp_self->has_field_$cpp_field_name$ && cpp_self->field_$cpp_field_name$ != Qnil) {\n"
+                    "  rb_hash_aset(hash, rb_str_new2(\"$rb_field_name$\"), rb_funcall(cls_fastproto_message, rb_intern(\"to_hash\"), 1, cpp_self->field_$cpp_field_name$));\n"
+                    "}\n\n",
+                    "rb_field_name", field->name(),
+                    "cpp_field_name", cpp_field_name(field)
+                );
+            } else {
+                printer.Print(
+                    "if (cpp_self->field_$cpp_field_name$ != Qnil) {\n"
+                    "  rb_hash_aset(hash, rb_str_new2(\"$rb_field_name$\"), rb_funcall(cls_fastproto_message, rb_intern(\"to_hash\"), 1, cpp_self->field_$cpp_field_name$));\n"
+                    "}\n\n",
+                    "rb_field_name", field->name(),
+                    "cpp_field_name", cpp_field_name(field)
+                );
+            }
+        }
+
+        printer.Print("return hash;\n");
 
         printer.Outdent();
         printer.Print("}\n\n");
