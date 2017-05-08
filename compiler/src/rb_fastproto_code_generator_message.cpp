@@ -1325,7 +1325,7 @@ namespace rb_fastproto {
             if (field->is_optional()) {
                 printer.Print(
                     "if (cpp_self->has_field_$cpp_field_name$ && cpp_self->field_$cpp_field_name$ != Qnil) {\n"
-                    "  rb_hash_aset(hash, rb_str_new2(\"$rb_field_name$\"), rb_funcall(cls_fastproto_message, rb_intern(\"to_hash\"), 1, cpp_self->field_$cpp_field_name$));\n"
+                    "  rb_hash_aset(hash, ID2SYM(rb_intern(\"$rb_field_name$\")), rb_funcall(cls_fastproto_message, rb_intern(\"to_hash\"), 1, cpp_self->field_$cpp_field_name$));\n"
                     "}\n\n",
                     "rb_field_name", field->name(),
                     "cpp_field_name", cpp_field_name(field)
@@ -1333,7 +1333,7 @@ namespace rb_fastproto {
             } else {
                 printer.Print(
                     "if (cpp_self->field_$cpp_field_name$ != Qnil) {\n"
-                    "  rb_hash_aset(hash, rb_str_new2(\"$rb_field_name$\"), rb_funcall(cls_fastproto_message, rb_intern(\"to_hash\"), 1, cpp_self->field_$cpp_field_name$));\n"
+                    "  rb_hash_aset(hash, ID2SYM(rb_intern(\"$rb_field_name$\")), rb_funcall(cls_fastproto_message, rb_intern(\"to_hash\"), 1, cpp_self->field_$cpp_field_name$));\n"
                     "}\n\n",
                     "rb_field_name", field->name(),
                     "cpp_field_name", cpp_field_name(field)
